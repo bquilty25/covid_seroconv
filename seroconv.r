@@ -9,19 +9,30 @@ lseq <- function(from=1, to=100000, length.out=6) {
 }
 
 #Load and clean data
-dat <- read_csv("all_SARS_CoV2_data_03EP2021_updated.csv") %>% 
+# dat <- read_csv("all_SARS_CoV2_data_03EP2021_updated.csv") %>% 
+#   select(-c(pid_child, mat_pair, chid_pair)) %>% 
+#   rename("child_wave_1_titre"=CoV2S_1wave_child,
+#          "child_wave_2_titre"=CoV2S_2wave_child,
+#          "mother_wave_1_titre"=CoV2S_1wave_mat,
+#          "mother_wave_2_titre"=CoV2S_2wave_mat,
+#          "child_change"=child_wave1_wave2_incr_decr,
+#          "mother_change"=mat_w1_w2_incr_decr) 
+
+dat <- read_csv("all_SARS_CoV2_data_17SEP2021_updated.csv") %>% 
   select(-c(pid_child, mat_pair, chid_pair)) %>% 
-  rename("child_wave_1_titre"=CoV2S_1wave_child,
-         "child_wave_2_titre"=CoV2S_2wave_child,
-         "mother_wave_1_titre"=CoV2S_1wave_mat,
-         "mother_wave_2_titre"=CoV2S_2wave_mat,
-         "child_change"=child_wave1_wave2_incr_decr,
-         "mother_change"=mat_w1_w2_incr_decr) 
+  select(-c(1:6)) %>% 
+  rename("child_wave_1_titre"=SB1351_1wave_child,
+         "child_wave_2_titre"=SB1351_2wave_child,
+         "mother_wave_1_titre"=SB1351_1wave_mat,
+         "mother_wave_2_titre"=SB1351_2wave_mat) %>% 
+  mutate(child_change=ifelse(child_wave_2_titre>child_wave_1_titre,"Increase","Decease or stays the same"),
+         mother_change=ifelse(mother_wave_2_titre>mother_wave_1_titre,"Increase","Decease or stays the same")) %>% 
+  select(sort(names(.)))
 
 dat_child <- dat %>% select(1:3) %>% rename_all(~stringr::str_replace(.,"^child_","")) %>%  mutate(age="child") %>% 
-  drop_na(change) %>% mutate(change=as.factor(change))  %>% filter(wave_1_titre>1)
+  drop_na(change) %>% mutate(change=as.factor(change))  #%>% filter(wave_1_titre>1)
 dat_mother <- dat %>% select(4:6) %>% rename_all(~stringr::str_replace(.,"^mother_","")) %>% mutate(age="mother")%>% 
-  drop_na(change) %>% mutate(change=as.factor(change)) %>% filter(wave_1_titre>1)
+  drop_na(change) %>% mutate(change=as.factor(change)) #%>% filter(wave_1_titre>1)
 
 
 bind_rows(dat_mother,dat_child) %>% 
@@ -69,7 +80,7 @@ model <- function(){
   thresh_95 <- -a*0.05+max_Y*0.05+a
   
   #Priors
-  a~dbeta(1, 1) #
+  a~dbeta(1, 1) 
   
   c~dbeta(1,1)
   
@@ -167,6 +178,8 @@ child_thresh_50_2.5 <- exp(approx(y=log(pred_t),x=child_tidy$`2.5%`,
 child_thresh_50_97.5 <- exp(approx(y=log(pred_t),x=child_tidy$`97.5%`,
                                      xout = child_thresh_50_y)$y)
 
+paste0(child_thresh_50_med,"(",child_thresh_50_2.5," - ",child_thresh_50_97.5,")")
+
 child_plot <- child_tidy %>% 
   bind_cols(pred_t) %>% 
   ggplot(aes(y=(median), x=...4)) + 
@@ -181,4 +194,4 @@ child_plot <- child_tidy %>%
 
 mother_plot+child_plot&theme_minimal()&theme(plot.title = element_text(hjust = 0.5),panel.border = element_rect(fill = NA))&coord_fixed(ratio=4/1)&scale_fill_brewer()
 
-ggsave("re.png",width=210,height=150,units="mm",dpi=600)
+ggsave("res_beta.png",width=210,height=150,units="mm",dpi=600)
