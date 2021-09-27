@@ -19,9 +19,9 @@ dat <- read_csv("all_SARS_CoV2_data_03EP2021_updated.csv") %>%
          "mother_change"=mat_w1_w2_incr_decr) 
 
 dat_child <- dat %>% select(1:3) %>% rename_all(~stringr::str_replace(.,"^child_","")) %>%  mutate(age="child") %>% 
-  drop_na(change) %>% mutate(change=as.factor(change))  %>% filter(wave_1_titre>1)
+  drop_na(change) %>% mutate(change=as.factor(change))  #%>% filter(wave_1_titre>1)
 dat_mother <- dat %>% select(4:6) %>% rename_all(~stringr::str_replace(.,"^mother_","")) %>% mutate(age="mother")%>% 
-  drop_na(change) %>% mutate(change=as.factor(change)) %>% filter(wave_1_titre>1)
+  drop_na(change) %>% mutate(change=as.factor(change)) #%>% filter(wave_1_titre>1)
 
 
 bind_rows(dat_mother,dat_child) %>% 
@@ -52,20 +52,38 @@ child_tab <- dat_child %>%
 child_tab <- table(child_tab$sero1,child_tab$change)
 1-epitools::oddsratio.wald(child_tab)$measure
 
-#rev cum dens
-child_rcd <- Hmisc::Ecdf(dat_child$wave_1_titre,what="1-F")
+#rev cum dens - exc seroneg
+
+child_rcd <- Hmisc::Ecdf(dat_child %>% filter(wave_1_titre>1) %>% pull(wave_1_titre),what="1-F")
 
 #titre at attack rate efficacy
-data.frame(x=child_rcd$x,y=child_rcd$y) %>% 
-  filter(y>0.64,y<0.65)
+rcd_child <- data.frame(x=child_rcd$x,y=child_rcd$y) %>% 
+  ggplot(aes(x=x,y=y))+
+  geom_step()+
+  geom_segment(aes(x=0,xend=85.54332,y=0.6439394,yend=0.6439394))+
+  geom_segment(aes(x=85.54332,xend=85.54332,y=0,yend=0.6439394))+
+  geom_label(aes(y=0.644,x=85.5,label=0.644),hjust=-0.2)+
+  geom_label(aes(x=85.5,y=0,label=85.5),hjust=-0.2)+
+  labs(title="Children")+
+  scale_x_log10("Wild-type Anti-Spike IgG (Wave 1)")
 
 #rev cum dens
-mother_rcd <- Hmisc::Ecdf(dat_mother$wave_1_titre,what="1-F")
+mother_rcd <- Hmisc::Ecdf(dat_mother %>% filter(wave_1_titre>1) %>% pull(wave_1_titre),what="1-F")
 
 #titre at attack rate efficacy
-data.frame(x=mother_rcd$x,y=mother_rcd$y) %>% 
-  filter(y>0.62,y<0.63)
+rcd_mother <- data.frame(x=mother_rcd$x,y=mother_rcd$y) %>% 
+  ggplot(aes(x=x,y=y))+
+  geom_step()+
+  geom_segment(aes(x=0,xend=21.54557,y=0.6214286,yend=0.6214286))+
+  geom_segment(aes(x=21.54557,xend=21.54557,y=0,yend=0.6214286 ))+
+  geom_label(aes(y=0.6214286,x=21.54557,label=0.621),hjust=-0.2)+
+  geom_label(aes(x=21.54557,y=0,label=21.6),hjust=-0.2)+
+  labs(title="Mothers",y=expression("Pr(X">="x)"))+
+  scale_x_log10("Wild-type Anti-Spike IgG (Wave 1)")
 
+rcd_mother/rcd_child&theme_minimal()&theme(plot.title = element_text(hjust = 0.5),panel.border = element_rect(fill = NA))&scale_fill_brewer()
+
+ggsave("res_rcd.png",width=150,height=210,units="mm",dpi=600)
 
 # Code from https://github.com/xbouteiller/GompertzFit, 
 # modified to include a Bernoulli likelihood rather than Normal
