@@ -83,28 +83,27 @@ model <- function(){
 
   min_Y <- min(S)
   max_Y <- max(S)
-  reduction <- 1-(max_Y/min_Y)
-
+  
   thresh_50 <- -min_Y*0.5+a*0.5+min_Y
   
-  thresh_60 <- -min_Y*0.6+a*0.6+min_Y
-  thresh_70 <- -min_Y*0.7+a*0.7+min_Y
   thresh_80 <- -min_Y*0.8+a*0.8+min_Y
-  thresh_90 <- -min_Y*0.9+a*0.9+min_Y
-  thresh_95 <- -min_Y*0.95+a*0.95+min_Y
   
+  reduction <- 1-(a/min_Y)
+
+  maximal <- 1-a
+  
+  minimal <- 1-min_Y
 
   #Priors
   a~dbeta(1, 1) 
   
-  #c~dbeta(1,1)
   
   b~dnorm(0, lambda1)
   lambda1~dgamma(0.0001,0.0001) #uninformative Gamma prior
 
-   tm~dnorm(0, lambda2)
-   exp_tm <- exp(tm)
-   lambda2~dgamma(0.0001,0.0001) #uninformative gamma prior
+  tm~dnorm(0, lambda2)
+  exp_tm <- exp(tm)
+  lambda2~dgamma(0.0001,0.0001) #uninformative gamma prior
   
 }
 
@@ -129,7 +128,9 @@ jags(model.file=model,
                                      "thresh_90",
                                      "thresh_95",
                                      "min_Y",
-                                     "max_Y"),
+                                     "max_Y",
+                                     "maximal",
+                                     "minimal"),
                 #inits=inits,
                 n.iter=2.5e4,
                 n.chains = 2,
@@ -141,18 +142,32 @@ pred_t <- lseq(from=0.55,to=1000,length.out = 1000)
 
 
 #Run model for mother
-
-mother_res <- run_model(data.list = list(n=nrow(dat_mother)+length(pred_t),
-                                         Y=c(as.integer(dat_mother$change)-1,rep(NA,length(pred_t))),
-                                         titre=c(log(dat_mother$wave_1_titre),log(pred_t))))
+pred_t_mother <- lseq(from=min(dat_mother$wave_1_titre),to=max(dat_mother$wave_1_titre),length.out = 1000)
+mother_res <- run_model(data.list = list(n=nrow(dat_mother)+length(pred_t_mother),
+                                         Y=c(as.integer(dat_mother$change)-1,rep(NA,length(pred_t_mother))),
+                                         titre=c(log(dat_mother$wave_1_titre),log(pred_t_mother))))
 
 saveRDS(mother_res,"mother_mcmc.rds")
 
 #Run model for children
-child_res <-  run_model(data.list = list(n=nrow(dat_child)+length(pred_t),
-                                         Y=c(as.integer(dat_child$change)-1,rep(NA,length(pred_t))),
-                                         titre=c(log(dat_child$wave_1_titre),log(pred_t))))
+pred_t_child <- lseq(from=min(dat_child$wave_1_titre),to=max(dat_child$wave_1_titre),length.out = 1000)
+child_res <-  run_model(data.list = list(n=nrow(dat_child)+length(pred_t_child),
+                                         Y=c(as.integer(dat_child$change)-1,rep(NA,length(pred_t_child))),
+                                         titre=c(log(dat_child$wave_1_titre),log(pred_t_child))))
 saveRDS(child_res,"child_mcmc.rds")
+
+#Table 1
+bind_rows(
+  mmcc::tidy(as.mcmc(mother_res)) %>% 
+  mutate(age="Mothers"),
+  mmcc::tidy(as.mcmc(child_res)) %>% 
+        mutate(age="Children")) %>% 
+  filter(parameter %in% c("maximal","minimal","b")) %>% 
+  mutate_at(vars(median,`2.5%`,`97.5%`),~round(.,2)) %>% 
+  mutate(estimate=paste0(median, " (",`2.5%`,", ",`97.5%`,")")) %>% 
+  select(age,parameter,estimate) %>% 
+  pivot_wider(values_from = estimate,names_from = parameter) %>% 
+  select(age,minimal,maximal,b)
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
 extract_ab_thresholds <- function(jags_res,thresh="thresh_50"){
@@ -172,16 +187,19 @@ extract_ab_thresholds <- function(jags_res,thresh="thresh_50"){
 }
 
 mother_thresh_50 <- extract_ab_thresholds(mother_res,"thresh_50")
+mother_thresh_80 <- extract_ab_thresholds(mother_res,"thresh_80")
 
 mother_plot <- mmcc::tidy(as.mcmc(mother_res)) %>% 
   filter(str_detect(parameter,"S")) %>% 
   select(median,`2.5%`,`97.5%`) %>% 
   slice(nrow(dat_mother)+1:n()) %>% 
-  bind_cols(pred_t) %>% 
+  bind_cols(pred_t_mother) %>% 
   ggplot()+
   geom_smooth(aes(ymin=1-`2.5%`, ymax=1-`97.5%`,y=1-median,x=...4),colour="#2ca25f", fill="#99d8c9", stat="identity")+
-  geom_point(data=dat_mother,aes(y=1/1-as.integer(change)+1, x=wave_1_titre),pch=124,size=4,alpha=0.5,colour="#2ca25f")+
+  geom_histogram(data=dat_mother %>% filter(as.integer(change)==2),aes(x=wave_1_titre, y = stat(count)/400), bins = 30, na.rm = TRUE,fill="#2ca25f",alpha=0.7) +
+  geom_histogram(data=dat_mother%>% filter(as.integer(change)==1),aes(x = wave_1_titre, y = -1*stat(count)/400), bins = 30, na.rm = TRUE, position = position_nudge(y = 1),fill="#2ca25f",alpha=0.7)+
   geom_pointrange(data=mother_thresh_50,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
+  geom_pointrange(data=mother_thresh_80,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
   scale_x_log10("WT S-specific IgG following Wave 1 (WHO BAU/ml)" )+
   scale_y_continuous("Probability of increased WT S-specific IgG titres following Wave 2",labels = scales::percent)+
   ggtitle("Mothers")
@@ -189,18 +207,21 @@ mother_plot <- mmcc::tidy(as.mcmc(mother_res)) %>%
 
 #child threshold
 child_thresh_50 <- extract_ab_thresholds(child_res,"thresh_50")
+child_thresh_80 <- extract_ab_thresholds(child_res,"thresh_80")
 
 child_plot <- mmcc::tidy(as.mcmc(child_res)) %>% 
   filter(str_detect(parameter,"S")) %>% 
   select(median,`2.5%`,`97.5%`) %>% 
   slice(nrow(dat_child)+1:n()) %>% 
-  bind_cols(pred_t) %>% 
+  bind_cols(pred_t_child) %>% 
   ggplot()+
   geom_smooth(aes(ymin=1-`2.5%`, ymax=1-`97.5%`,y=1-median,x=...4),colour="#8856a7", fill="#9ebcda", stat="identity")+
-  geom_point(data=dat_child,aes(y=1/1-as.integer(change)+1, x=wave_1_titre),pch=124,size=4,alpha=0.5,colour="#8856a7")+
+  geom_histogram(data=dat_child %>% filter(as.integer(change)==2),aes(x=wave_1_titre, y = stat(count)/400), bins = 30, na.rm = TRUE,fill="#8856a7",alpha=0.7) +
+  geom_histogram(data=dat_child%>% filter(as.integer(change)==1),aes(x = wave_1_titre, y = -1*stat(count)/400), bins = 30, na.rm = TRUE, position = position_nudge(y = 1),fill="#8856a7",alpha=0.7)+
   geom_pointrange(data=child_thresh_50,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
+  geom_pointrange(data=child_thresh_80,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
   scale_x_log10("WT S-specific IgG following Wave 1 (WHO BAU/ml)" )+
-  scale_y_continuous("Probability of increased WT S-specific IgG titres following Wave 2",labels = scales::percent)+
+  scale_y_continuous("",labels = scales::percent)+
   ggtitle("Children")
 
 
@@ -208,6 +229,9 @@ mother_plot+child_plot&
   theme_minimal()&
   theme(plot.title = element_text(hjust = 0.5),
         panel.border = element_rect(fill = NA))&
-  scale_fill_brewer()
+  scale_fill_brewer()&
+  coord_cartesian(xlim=c(NA,1000),expand=F)
 
 ggsave("res_logistic.png",width=210,height=150,units="mm",dpi=600)
+
+c("thresh_50","thresh_60","thresh_70","thresh_80","thresh_90","thresh_95") %>% map(~extract_ab_thresholds(mother_res,.x))
