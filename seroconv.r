@@ -18,15 +18,15 @@ dat <- read_csv("all_SARS_CoV2_data_03EP2021_updated.csv") %>%
          "child_change"=child_wave1_wave2_incr_decr,
          "mother_change"=mat_w1_w2_incr_decr)
 
-# dat <- read_csv("all_SARS_CoV2_data_17SEP2021_updated.csv") %>% 
-#   select(-c(pid_child, mat_pair, chid_pair)) %>% 
-#   select(-c(1:6)) %>% 
+# dat <- read_csv("all_SARS_CoV2_data_17SEP2021_updated.csv") %>%
+#   select(-c(pid_child, mat_pair, chid_pair)) %>%
+#   select(-c(1:6)) %>%
 #   rename("child_wave_1_titre"=SB1351_1wave_child,
 #          "child_wave_2_titre"=SB1351_2wave_child,
 #          "mother_wave_1_titre"=SB1351_1wave_mat,
-#          "mother_wave_2_titre"=SB1351_2wave_mat) %>% 
+#          "mother_wave_2_titre"=SB1351_2wave_mat) %>%
 #   mutate(child_change=ifelse(child_wave_2_titre>child_wave_1_titre,"Increase","Decease or stays the same"),
-#          mother_change=ifelse(mother_wave_2_titre>mother_wave_1_titre,"Increase","Decease or stays the same")) %>% 
+#          mother_change=ifelse(mother_wave_2_titre>mother_wave_1_titre,"Increase","Decease or stays the same")) %>%
 #   select(sort(names(.)))
 
 dat_child <- dat %>% select(1:3) %>% rename_all(~stringr::str_replace(.,"^child_","")) %>%  mutate(age="child") %>% 
@@ -88,7 +88,7 @@ model <- function(){
   
   thresh_80 <- -min_Y*0.8+a*0.8+min_Y
   
-  reduction <- 1-(a/min_Y)
+  reduction <- 1-min_Y/a
 
   maximal <- (1-a)*100
   
@@ -186,7 +186,10 @@ mother_plot <- mmcc::tidy(as.mcmc(mother_res)) %>%
   geom_smooth(aes(ymin=1-`2.5%`, ymax=1-`97.5%`,y=1-median,x=...4),colour="#2ca25f", fill="#99d8c9", stat="identity")+
   geom_point(data=dat_mother,aes(y=1/1-as.integer(change)+1, x=wave_1_titre),pch=124,size=5,alpha=0.5,colour="#2ca25f")+
   geom_pointrange(data=mother_thresh_50,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
-  geom_pointrange(data=mother_thresh_80,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
+  geom_hline(data=mmcc::tidy(as.mcmc(mother_res)) %>% 
+               filter(str_detect(parameter,"maximal")),
+             aes(yintercept=median/100),
+             linetype="dashed")+
   scale_x_log10("WT S-specific IgG following Wave 1 (WHO BAU/ml)" )+
   scale_y_continuous("Probability of increased WT S-specific IgG titres following Wave 2",labels = scales::percent)+
   ggtitle("Mothers")
@@ -205,7 +208,10 @@ child_plot <- mmcc::tidy(as.mcmc(child_res)) %>%
   geom_smooth(aes(ymin=1-`2.5%`, ymax=1-`97.5%`,y=1-median,x=...4),colour="#8856a7", fill="#9ebcda", stat="identity")+
   geom_point(data=dat_child,aes(y=1/1-as.integer(change)+1, x=wave_1_titre),pch=124,size=5,alpha=0.5,colour="#8856a7")+
   geom_pointrange(data=child_thresh_50,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
-  geom_pointrange(data=child_thresh_80,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
+  geom_hline(data=mmcc::tidy(as.mcmc(child_res)) %>% 
+               filter(str_detect(parameter,"maximal")),
+              aes(yintercept=median/100),
+             linetype="dashed")+
   scale_x_log10("WT S-specific IgG following Wave 1 (WHO BAU/ml)" )+
   scale_y_continuous("",labels = scales::percent)+
   ggtitle("Children")
