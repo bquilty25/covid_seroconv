@@ -90,9 +90,9 @@ model <- function(){
   
   reduction <- 1-(a/min_Y)
 
-  maximal <- 1-a
+  maximal <- (1-a)*100
   
-  minimal <- 1-min_Y
+  minimal <- (1-min_Y)*100
 
   #Priors
   a~dbeta(1, 1) 
@@ -156,18 +156,6 @@ child_res <-  run_model(data.list = list(n=nrow(dat_child)+length(pred_t_child),
                                          titre=c(log(dat_child$wave_1_titre),log(pred_t_child))))
 saveRDS(child_res,"child_mcmc.rds")
 
-#Table 1
-bind_rows(
-  mmcc::tidy(as.mcmc(mother_res)) %>% 
-  mutate(age="Mothers"),
-  mmcc::tidy(as.mcmc(child_res)) %>% 
-        mutate(age="Children")) %>% 
-  filter(parameter %in% c("maximal","minimal","b")) %>% 
-  mutate_at(vars(median,`2.5%`,`97.5%`),~round(.,2)) %>% 
-  mutate(estimate=paste0(median, " (",`2.5%`,", ",`97.5%`,")")) %>% 
-  select(age,parameter,estimate) %>% 
-  pivot_wider(values_from = estimate,names_from = parameter) %>% 
-  select(age,minimal,maximal,b)
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
 extract_ab_thresholds <- function(jags_res,thresh="thresh_50"){
@@ -196,8 +184,7 @@ mother_plot <- mmcc::tidy(as.mcmc(mother_res)) %>%
   bind_cols(pred_t_mother) %>% 
   ggplot()+
   geom_smooth(aes(ymin=1-`2.5%`, ymax=1-`97.5%`,y=1-median,x=...4),colour="#2ca25f", fill="#99d8c9", stat="identity")+
-  geom_histogram(data=dat_mother %>% filter(as.integer(change)==2),aes(x=wave_1_titre, y = stat(count)/400), bins = 30, na.rm = TRUE,fill="#2ca25f",alpha=0.7) +
-  geom_histogram(data=dat_mother%>% filter(as.integer(change)==1),aes(x = wave_1_titre, y = -1*stat(count)/400), bins = 30, na.rm = TRUE, position = position_nudge(y = 1),fill="#2ca25f",alpha=0.7)+
+  geom_point(data=dat_mother,aes(y=1/1-as.integer(change)+1, x=wave_1_titre),pch=124,size=5,alpha=0.5,colour="#2ca25f")+
   geom_pointrange(data=mother_thresh_50,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
   geom_pointrange(data=mother_thresh_80,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
   scale_x_log10("WT S-specific IgG following Wave 1 (WHO BAU/ml)" )+
@@ -216,8 +203,7 @@ child_plot <- mmcc::tidy(as.mcmc(child_res)) %>%
   bind_cols(pred_t_child) %>% 
   ggplot()+
   geom_smooth(aes(ymin=1-`2.5%`, ymax=1-`97.5%`,y=1-median,x=...4),colour="#8856a7", fill="#9ebcda", stat="identity")+
-  geom_histogram(data=dat_child %>% filter(as.integer(change)==2),aes(x=wave_1_titre, y = stat(count)/400), bins = 30, na.rm = TRUE,fill="#8856a7",alpha=0.7) +
-  geom_histogram(data=dat_child%>% filter(as.integer(change)==1),aes(x = wave_1_titre, y = -1*stat(count)/400), bins = 30, na.rm = TRUE, position = position_nudge(y = 1),fill="#8856a7",alpha=0.7)+
+  geom_point(data=dat_child,aes(y=1/1-as.integer(change)+1, x=wave_1_titre),pch=124,size=5,alpha=0.5,colour="#8856a7")+
   geom_pointrange(data=child_thresh_50,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
   geom_pointrange(data=child_thresh_80,aes(xmin=`0.025`,xmax=`0.975`,x=`0.5`,y=1-median))+
   scale_x_log10("WT S-specific IgG following Wave 1 (WHO BAU/ml)" )+
@@ -230,8 +216,28 @@ mother_plot+child_plot&
   theme(plot.title = element_text(hjust = 0.5),
         panel.border = element_rect(fill = NA))&
   scale_fill_brewer()&
-  coord_cartesian(xlim=c(NA,1000),expand=F)
+  coord_cartesian(xlim=c(0.5,1000),expand=F)
 
 ggsave("res_logistic.png",width=210,height=150,units="mm",dpi=600)
 
-c("thresh_50","thresh_60","thresh_70","thresh_80","thresh_90","thresh_95") %>% map(~extract_ab_thresholds(mother_res,.x))
+#Table 1
+bind_rows(
+  mmcc::tidy(as.mcmc(mother_res)) %>% 
+    mutate(age="Mothers"),
+  mmcc::tidy(as.mcmc(child_res)) %>% 
+    mutate(age="Children")) %>% 
+  filter(parameter %in% c("maximal","minimal","b")) %>% 
+  bind_rows(extract_ab_thresholds(mother_res,thresh="thresh_50") %>% 
+              mutate(age="Mothers") %>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+  bind_rows(extract_ab_thresholds(child_res,thresh="thresh_50") %>% 
+              mutate(age="Children") %>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+  bind_rows(extract_ab_thresholds(mother_res,thresh="thresh_80") %>% 
+              mutate(age="Mothers") %>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+  bind_rows(extract_ab_thresholds(child_res,thresh="thresh_80") %>% 
+              mutate(age="Children") %>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+  mutate_at(vars(median,`2.5%`,`97.5%`),~round(.,1)) %>% 
+  mutate(estimate=paste0(median, " (",`2.5%`,", ",`97.5%`,")")) %>% 
+  select(age,parameter,estimate) %>% 
+  pivot_wider(values_from = estimate,names_from = parameter) %>% 
+  select(age,minimal,maximal,b,thresh_50,thresh_80) %>% 
+  htmlTable::htmlTable()
