@@ -63,9 +63,6 @@ run_model <- function(data.list){
     #Priors
     a~dbeta(1, 1) 
     
-    #b~dnorm(0,lambda1)
-    #lambda1~dgamma(0.001,0.001)
-    
     b~dlnorm(1,tau1)
     tau1 <- pow(sigma1,-2)
     sigma1 ~ dunif(0.1,2)
@@ -75,9 +72,6 @@ run_model <- function(data.list){
     tm~dlnorm(1,tau2)
     tau2 <- pow(sigma2,-2)
     sigma2 ~ dunif(0.1,2)
-    
-    #tm~dnorm(0,lambda2)
-    #lambda2~dgamma(0.001,0.001)
     
     exp_tm <- exp(tm)
     
@@ -111,15 +105,18 @@ run_model <- function(data.list){
 }
 
 #Run model for post-wave 2
-wave2_dat <- dat %>% filter(!(`1`<1&`2`<1)) %>% drop_na(`1`,`2`)
+wave2_dat <- dat %>% 
+  #filter(!(`1`<1&`2`<1)) %>% 
+  drop_na(`1`,`2`)
 
-(wave2_plot <- wave2_dat %>% 
+(wave2_change_plot <- wave2_dat %>% 
   pivot_longer(c(`1`,`2`,`3`)) %>% 
   filter(name!=3) %>% 
-  ggplot(aes(x=name,y=value,group=pid_child,colour=factor(increase_2_v_1)))+
+  mutate(variant=ifelse(name==1,"Ancestral","Beta")) %>% 
+  ggplot(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)))+
   geom_point(alpha=0.2)+
   geom_path(alpha=0.2)+
-  #facet_wrap(~name,scale="free_x",labeller = labeller(`fct_rev(age)`=Hmisc::capitalize))+
+  labs(title="Beta wave")+
   scale_y_log10("Anti-Spike IgG titre")+
   theme_minimal()+
   theme(plot.title = element_text(hjust = 0.5),
@@ -135,17 +132,20 @@ mcmcplot(wave2_res,random = T)
 saveRDS(wave2_res,"wave2_mcmc.rds")
 
 #Run model for post-wave 3
-wave3_dat <- dat %>% filter(!(`2`<1&`3`<1)) %>% drop_na(`2`,`3`)
+wave3_dat <- dat %>% 
+  #filter(!(`2`<1&`3`<1)) %>% 
+  drop_na(`2`,`3`)
 
-(wave3_plot <- wave3_dat %>% 
+(wave3_change_plot <- wave3_dat %>% 
   pivot_longer(c(`1`,`2`,`3`)) %>% 
   filter(name!=1) %>% 
-  ggplot(aes(x=name,y=value,group=pid_child,colour=factor(increase_3_v_2)))+
+  mutate(variant=ifelse(name==2,"Beta","Delta")) %>% 
+  ggplot(aes(x=variant,y=value,group=pid_child,colour=factor(increase_3_v_2)))+
   geom_point(alpha=0.2)+
   geom_path(alpha=0.2)+
-  #facet_wrap(~name,scale="free_x",labeller = labeller(`fct_rev(age)`=Hmisc::capitalize))+
   scale_y_log10("Anti-Spike IgG titre")+
   theme_minimal()+
+  labs(title="Delta wave")+
   theme(plot.title = element_text(hjust = 0.5),
         panel.border = element_rect(fill = NA))
   )
@@ -158,48 +158,39 @@ wave3_res <- run_model(data.list = list(n=nrow(wave3_dat)+length(pred_t_wave3),
 mcmcplot(wave3_res,random = T)
 saveRDS(wave3_res,"wave3_mcmc.rds")
 
-wave2_plot+wave3_plot&theme(legend.position = "bottom")&scale_y_log10("Titre",limits=c(NA,10000))&labs(x="After wave x")&scale_colour_brewer("Increase post-wave",type="qual",palette = "Set1",labels=c("No","Yes"))
+plot_a <- wave2_change_plot+wave3_change_plot+plot_layout(guides="collect")&
+  theme(legend.position = "bottom")&
+  scale_y_log10("S-specific IgG titre (WHO BAU/ml)",limits=c(NA,10000))&
+  labs(x="")&
+  scale_colour_brewer("Increase post-wave",type="qual",palette = "Set1",labels=c("No","Yes"),direction=-1)
 
 ggsave("change_plot.png",width=210,height=150,units="mm",dpi=600,bg="white")
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
-extract_ab_thresholds <- function(jags_res,thresh="thresh_50"){
+extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){
   #browser()
   y <- mmcc::tidy(as.mcmc(jags_res)) %>% 
-    filter(str_detect(parameter,thresh))
+    filter(parameter==!!thresh)
   
   x <- mmcc::mcmc_to_dt(as.mcmc(jags_res)) %>% 
     filter(parameter%in%c("a","b","c","tm")) %>% 
     pivot_wider(values_from = "value",names_from = "parameter") %>% 
-    mutate(x_pred=exp(-(log((c-y$median)/(y$median-a))/b)+tm)) %>% 
+    mutate(x_pred=exp(-(log((c-y$median*mult)/(y$median*mult-a))/b)+tm)) %>% 
     summarise(x = quantile(x_pred, c(0.025, 0.5, 0.975),na.rm=T), q = c(0.025, 0.5, 0.975)) %>% 
     pivot_wider(values_from = x,names_from = q)
   
   y %>% bind_cols(x)
 }
 
-y_midpoint <- function(res){
-  #browser()
-  mmcc::tidy(as.mcmc(res)) %>%
-    filter(parameter%in%c("a","c")) %>% 
-    select(parameter,median) %>% 
-    pivot_wider(values_from=median,names_from=parameter) %>% 
-    mutate(y_midpoint=(a+c)/2) %>% 
-    pull(y_midpoint)
-  
-}
-
 (wave2_plot <- mmcc::tidy(as.mcmc(wave2_res)) %>% 
   filter(str_detect(parameter,"S")) %>% 
   select(median,`2.5%`,`97.5%`) %>% 
-  #mutate_all(function(x)1-x) %>% 
   slice(nrow(wave2_dat)+1:n()) %>% 
   bind_cols(pred_t_wave2) %>% 
   ggplot()+
   geom_smooth(aes(ymin=`2.5%`, ymax=`97.5%`,y=median,x=...4),colour="#2ca25f", fill="#99d8c9", stat="identity")+
   geom_point(data=wave2_dat,aes(y=as.integer(increase_2_v_1), x=`1`),pch=124,size=5,alpha=0.5,colour="#2ca25f")+
-  geom_pointrange(data=mmcc::tidy(as.mcmc(wave2_res)) %>%
-                    filter(parameter=="exp_tm"),aes(x=median,xmin=`2.5%`, xmax=`97.5%`,y=y_midpoint(wave2_res)))+
+    geom_pointrange(data=extract_ab_thresholds(wave2_res,"thresh_50"),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
     geom_pointrange(data=extract_ab_thresholds(wave2_res,"thresh_80"),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
   geom_hline(data=mmcc::tidy(as.mcmc(wave2_res)) %>%
               filter(parameter%in%c("a","c")),
@@ -213,14 +204,12 @@ y_midpoint <- function(res){
 (wave3_plot <- mmcc::tidy(as.mcmc(wave3_res)) %>% 
   filter(str_detect(parameter,"S")) %>% 
   select(median,`2.5%`,`97.5%`) %>% 
-  #mutate_all(function(x)1-x) %>% 
   slice(nrow(wave3_dat)+1:n()) %>% 
   bind_cols(pred_t_wave3) %>% 
   ggplot()+
   geom_smooth(aes(ymin=`2.5%`, ymax=`97.5%`,y=median,x=...4),colour="#8856a7", fill="#9ebcda", stat="identity")+
   geom_point(data=wave3_dat,aes(y=increase_3_v_2, x=`2`),pch=124,size=5,alpha=0.5,colour="#8856a7")+
-  geom_pointrange(data=mmcc::tidy(as.mcmc(wave3_res)) %>%
-                      filter(parameter=="exp_tm"),aes(x=median,xmin=`2.5%`, xmax=`97.5%`,y=y_midpoint(wave3_res)))+
+  geom_pointrange(data=extract_ab_thresholds(wave3_res,"thresh_50"),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
   geom_pointrange(data=extract_ab_thresholds(wave3_res,"thresh_80"),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
   geom_hline(data=mmcc::tidy(as.mcmc(wave3_res)) %>%
               filter(parameter%in%c("a","c")),
@@ -231,17 +220,21 @@ y_midpoint <- function(res){
   ggtitle("Delta wave")
 )
 
-
-wave2_plot+wave3_plot&
+plot_b <- wave2_plot+wave3_plot&
   #scale_x_log10("IgG pre-wave (WHO BAU/ml)" )&
   #scale_y_continuous("Probability of increased titres following wave",labels = scales::percent)&
   theme_minimal()&
   theme(plot.title = element_text(hjust = 0.5),
-        panel.border = element_rect(fill = NA))&
+        panel.border = element_rect(fill = NA),
+        legend.position = "bottom")&
   scale_fill_brewer()&
   coord_cartesian(xlim=c(0.5,1000),expand=F)
 
 ggsave("res_logistic.png",width=210,height=150,units="mm",dpi=600,bg="white")
+
+(plot_a/plot_b)+plot_annotation(tag_levels = "A")
+ggsave("combined.png",width=210,height=210,units="mm",dpi=600,bg="white")
+
 
 #Table 1
 bind_rows(
@@ -249,27 +242,25 @@ bind_rows(
     mutate(wave="Wave 2"),
   mmcc::tidy(as.mcmc(wave3_res)) %>% 
     mutate(wave="Wave 3")) %>% 
-  filter(parameter %in% c("maximal","minimal","b")) %>% 
+  filter(parameter %in% c("a","c")) %>% 
+  mutate(across(c(median,`2.5%`,`97.5%`),function(x)x*100)) %>% 
+  bind_rows(extract_ab_thresholds(wave2_res,thresh="a",mult=0.5) %>% 
+              mutate(wave="Wave 2",parameter="a_0.5") %>% select(parameter,wave,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+  bind_rows(extract_ab_thresholds(wave3_res,thresh="a",mult=0.5) %>% 
+              mutate(wave="Wave 3",parameter="a_0.5")%>% select(parameter,wave,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
   bind_rows(extract_ab_thresholds(wave2_res,thresh="thresh_50") %>% 
-              mutate(wave="Wave 2") %>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+              mutate(wave="Wave 2") %>% select(parameter,wave,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
   bind_rows(extract_ab_thresholds(wave3_res,thresh="thresh_50") %>% 
-              mutate(wave="Wave 3")%>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+              mutate(wave="Wave 3")%>% select(parameter,wave,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
   bind_rows(extract_ab_thresholds(wave2_res,thresh="thresh_80") %>% 
-              mutate(wave="Wave 2") %>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+              mutate(wave="Wave 2") %>% select(parameter,wave,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
   bind_rows(extract_ab_thresholds(wave3_res,thresh="thresh_80")%>% 
-              mutate(wave="Wave 3")%>% select(parameter,age,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
-  mutate_at(vars(median,`2.5%`,`97.5%`),~round(.,1)) %>% 
+              mutate(wave="Wave 3")%>% select(parameter,wave,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
+  mutate(`97.5%`=ifelse(`97.5%`>1000,Inf,`97.5%`),
+    across(c(median,`2.5%`,`97.5%`),~formatC(.,digits=1,format = "f"))) %>% 
   mutate(estimate=paste0(median, " (",`2.5%`,", ",`97.5%`,")")) %>% 
-  select(age,parameter,estimate) %>% 
+  select(wave,parameter,estimate) %>% 
   pivot_wider(values_from = estimate,names_from = parameter) %>% 
-  select(age,minimal,maximal,b,thresh_50,thresh_80) %>% 
+  select(wave,a,c,a_0.5,thresh_50,thresh_80) %>% 
   htmlTable::htmlTable()
-
-mmcc::tidy(as.mcmc(wave2_res)) %>% 
-  mutate(wave="Wave 2") %>% 
-  filter(parameter%in%c("a","c","exp_tm"))
-
-mmcc::tidy(as.mcmc(wave3_res)) %>% 
-  mutate(wave="Wave 3") %>% 
-  filter(parameter%in%c("a","c","exp_tm"))
 
