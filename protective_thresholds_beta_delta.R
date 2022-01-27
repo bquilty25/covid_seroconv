@@ -197,7 +197,7 @@ extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){
             aes(yintercept=median),
             linetype="dashed")+
   scale_x_log10("WT S-specific IgG pre-wave (WHO BAU/ml)" )+
-  scale_y_continuous("Probability of increased Beta S-specific IgG titres following Beta wave",labels = scales::percent)+
+  scale_y_continuous("Probability of increased Beta S-specific\nIgG titres following Beta wave",labels = scales::percent)+
   ggtitle("Beta wave")
 )
 
@@ -216,7 +216,7 @@ extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){
             aes(yintercept=median),
             linetype="dashed")+
   scale_x_log10("Beta S-specific IgG pre-wave (WHO BAU/ml)" )+
-  scale_y_continuous("Probability of increased Delta S-specific IgG titres following Delta wave",labels = scales::percent)+
+  scale_y_continuous("Probability of increased Delta S-specific\nIgG titres following Delta wave",labels = scales::percent)+
   ggtitle("Delta wave")
 )
 
