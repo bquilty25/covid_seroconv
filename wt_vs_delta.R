@@ -42,7 +42,7 @@ wave3_wt_res <- run_model(data.list = list(n=nrow(wave3_wt_dat)+length(pred_t_wa
                                         titre=c(log(wave3_wt_dat$`2`),log(pred_t_wave3_wt))))
 
 mcmcplot(wave3_wt_res,random = T)
-#saveRDS(wave3_wt_res,"wave3_wt_mcmc.rds")
+saveRDS(wave3_wt_res,"wave3_wt_mcmc.rds")
 
 #wave2_plot+wave3_wt_plot&theme(legend.position = "bottom")&scale_y_log10("Titre",limits=c(NA,10000))&labs(x="After wave x")&scale_colour_brewer("Increase post-wave",type="qual",palette = "Set1",labels=c("No","Yes"))
 
