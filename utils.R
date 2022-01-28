@@ -1,3 +1,4 @@
+install.packages("pacman")
 pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms)
 remotes::install_github("njtierney/mmcc")
 library(mmcc)
