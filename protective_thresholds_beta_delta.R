@@ -161,12 +161,12 @@ bind_rows(
   select(wave,parameter,estimate) %>% 
   pivot_wider(values_from = estimate,names_from = parameter) %>% 
   select(wave,a,c,a_0.5,thresh_50,thresh_80) %>% 
-  htmlTable::htmlTable()
+  htmlTable::htmlTable(rowlabel = F)
 
 #goodness of fit
 wave2_gof <- remove_geom(wave2_plot,"GeomPointrange")+
   geom_pointrange(data=wave2_dat %>% 
-                    mutate(titre_group=cut(`1`,breaks=c(-Inf,1.09,10,100,1000))) %>% 
+                    mutate(titre_group=cut(`1`,breaks=c(-Inf,1.09,10,100,Inf))) %>% 
                     group_by(titre_group) %>% 
                     summarise(N=n(),
                               avg_titre=median(`1`),
@@ -178,7 +178,7 @@ wave2_gof <- remove_geom(wave2_plot,"GeomPointrange")+
 
 wave3_gof <- remove_geom(wave3_plot,"GeomPointrange")+
   geom_pointrange(data=wave3_dat %>% 
-                    mutate(titre_group=cut(`2`,breaks=c(-Inf,1.09,10,100,1000))) %>% 
+                    mutate(titre_group=cut(`2`,breaks=c(-Inf,1.09,10,100,Inf))) %>% 
                     group_by(titre_group) %>% 
                     summarise(N=n(),
                               avg_titre=median(`2`),
@@ -188,12 +188,12 @@ wave3_gof <- remove_geom(wave3_plot,"GeomPointrange")+
                               p.hi=binom::binom.confint(x,N,methods = "exact")$upper),
                   aes(x=avg_titre,y=p,ymin=p.lo,ymax=p.hi))
 
-wave2_gof+wave3_gof&
+wave2_gof+wave3_gof+ancestral_vs_delta_gof&
   theme_minimal()&
   theme(plot.title = element_text(hjust = 0.5),
         panel.border = element_rect(fill = NA))&
   scale_fill_brewer()&
-  coord_cartesian(xlim=c(0.5,NA),expand=F)
+  coord_cartesian(xlim=c(0.5,1000),expand=F)
 
-ggsave("combined_gof.png",width=200,height=100,units="mm",dpi=600,bg="white")
+ggsave("combined_gof.png",width=300,height=100,units="mm",dpi=600,bg="white")
 

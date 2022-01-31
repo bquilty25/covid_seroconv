@@ -64,7 +64,7 @@ saveRDS(wave3_wt_res,"wave3_wt_mcmc.rds")
                aes(yintercept=median),
                linetype="dashed")+
     scale_x_log10("Ancestral S-specific IgG pre-wave (WHO BAU/ml)" )+
-    scale_y_continuous("Probability of increased Delta S-specific IgG titres following Delta wave",labels = scales::percent)+
+    scale_y_continuous("Probability of increased Delta S-specific\nIgG titres following Delta wave",labels = scales::percent)+
     ggtitle("Ancestral vs. Delta wave")
 )
 
@@ -98,21 +98,21 @@ bind_rows(
   select(wave,parameter,estimate) %>% 
   pivot_wider(values_from = estimate,names_from = parameter) %>% 
   select(wave,a,c,a_0.5,thresh_50,thresh_80) %>% 
-  htmlTable::htmlTable()
+  htmlTable::htmlTable(rnames = F)
 
 wave3_wt_plot +
   theme_minimal()&
   theme(plot.title = element_text(hjust = 0.5),
         panel.border = element_rect(fill = NA))&
   scale_fill_brewer()&
-  coord_cartesian(xlim=c(0.5,NA),expand=F)
+  coord_cartesian(xlim=c(0.5,1000),expand=F)
 
 ggsave("ancestral_vs_delta.png",width=150,height=150,units="mm",dpi=600,bg="white")
 
 
-remove_geom(wave3_wt_plot,"GeomPointrange")+
+ancestral_vs_delta_gof <- remove_geom(wave3_wt_plot,"GeomPointrange")+
   geom_pointrange(data=wave3_wt_dat %>% 
-                    mutate(titre_group=cut(`2`,breaks=c(-Inf,1.09,10,100,1000))) %>% 
+                    mutate(titre_group=cut(`2`,breaks=c(-Inf,1.09,10,100,Inf))) %>% 
                     group_by(titre_group) %>% 
                     summarise(N=n(),
                               avg_titre=median(`2`),
@@ -125,7 +125,7 @@ remove_geom(wave3_wt_plot,"GeomPointrange")+
   theme(plot.title = element_text(hjust = 0.5),
         panel.border = element_rect(fill = NA))&
   scale_fill_brewer()&
-  coord_cartesian(xlim=c(0.5,NA),expand=F)
+  coord_cartesian(xlim=c(0.5,1000),expand=F)
 
 
 ggsave("ancestral_vs_delta_gof.png",width=150,height=150,units="mm",dpi=600,bg="white")
