@@ -175,6 +175,7 @@ wave3_gof <- remove_geom(wave3_plot,"GeomPointrange")+
                               p.hi=binom::binom.confint(x,N,methods = "exact")$upper),
                   aes(x=avg_titre,y=p,ymin=p.lo,ymax=p.hi))
 
+#This requires running the other script also
 wave2_gof+wave3_gof+ancestral_vs_delta_gof&
   theme_minimal()&
   theme(plot.title = element_text(hjust = 0.5),
