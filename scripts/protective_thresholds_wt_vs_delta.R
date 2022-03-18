@@ -95,8 +95,14 @@ bind_rows(
   mutate(estimate=paste0(median, " (",`2.5%`,", ",`97.5%`,")")) %>% 
   select(wave,parameter,estimate) %>% 
   pivot_wider(values_from = estimate,names_from = parameter) %>% 
-  select(wave,a,c,a_0.5,thresh_50,thresh_80) %>% 
-  htmlTable::htmlTable(rnames = F)
+  select(wave,a,c,thresh_50,thresh_80,a_0.5) %>% 
+  htmlTable::htmlTable(rownames = FALSE, header=c("Wave", 
+                                                    "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
+                                                    "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
+                                                    "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                    "80% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                    "IgG titres required to reduce probability of seroconversion by 50% (WHO BAU/ml, median, 95% CrI)"))
+
 
 # Goodness of fit plot
 (ancestral_vs_delta_gof <- remove_geom(wave3_wt_plot,"GeomPointrange")+
