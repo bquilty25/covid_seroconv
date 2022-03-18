@@ -1,5 +1,5 @@
-install.packages("pacman")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales)
+require("pacman")
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here)
 remotes::install_github("njtierney/mmcc")
 library(mmcc)
 
@@ -10,14 +10,14 @@ lseq <- function(from=1, to=100000, length.out=6) {
 }
 
 #Load and clean data
-dat <- read_xlsx("SARS_CoV2_data_3_waves_15dec2021.xlsx",sheet = 2) %>% 
+dat <- read_xlsx(here("data","SARS_CoV2_data_3_waves_15dec2021.xlsx"),sheet = 2) %>% 
   pivot_longer(CoV2S_1w_m:delta_3w_m) %>% 
   mutate(variant=case_when(str_detect(name,"CoV2")~"WT",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta"),
          variant=fct_relevel(variant,"WT","Beta","Delta"),
          wave=parse_number(str_sub(name,start=-4))) %>% 
-  select(-name) #%>% filter(value>1)
+  select(-name) 
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
 extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){

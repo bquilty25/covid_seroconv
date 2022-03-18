@@ -1,27 +1,14 @@
-source("utils.R")
+source("scripts/utils.R")
 
 dat <- dat %>% 
-  filter(variant == "WT" & wave == 1 | variant == "Beta" & wave == 2 | variant=="Delta" & wave==3) %>% 
+  filter(variant == "WT" & wave == 1 | variant == "Beta" & wave == 2 | variant=="Delta" & wave == 3) %>% 
   select(-variant) %>% 
   pivot_wider(values_from = value,names_from = wave) %>% 
   mutate(increase_2_v_1=as.integer(`2`>`1`*1.1),
          increase_3_v_2=as.integer(`3`>`2`*1.1)) #increase if >10% increase in titer
 
-dat %>%
-  pivot_longer(c(`1`,`2`,`3`)) %>% 
-  ggplot(aes(x=name,y=value,group=pid_child))+
-  geom_point(alpha=0.2)+
-  geom_path(alpha=0.2)+
-  #facet_wrap(~name,scale="free_x",labeller = labeller(`fct_rev(age)`=Hmisc::capitalize))+
-  scale_y_log10("Anti-Spike IgG titre")+
-  theme_minimal()+
-  theme(plot.title = element_text(hjust = 0.5),
-        panel.border = element_rect(fill = NA))+
-  scale_colour_brewer(type="qual",guide=F,direction=-1)
-
 #Run model for post-wave 2
 wave2_dat <- dat %>% 
-  #filter(!(`1`<1&`2`<1)) %>% 
   drop_na(`1`,`2`)
 
 (wave2_change_plot <- wave2_dat %>% 
@@ -44,7 +31,7 @@ wave2_res <- run_model(data.list = list(n=nrow(wave2_dat)+length(pred_t_wave2),
                                          titre=c(log(wave2_dat$`1`),log(pred_t_wave2))))
 
 mcmcplot(wave2_res,random = T)
-saveRDS(wave2_res,"wave2_mcmc.rds")
+saveRDS(wave2_res,here("model_output", "wave2_mcmc.rds"))
 
 #Run model for post-wave 3
 wave3_dat <- dat %>% 
@@ -71,7 +58,7 @@ wave3_res <- run_model(data.list = list(n=nrow(wave3_dat)+length(pred_t_wave3),
                                         titre=c(log(wave3_dat$`2`),log(pred_t_wave3))))
 
 mcmcplot(wave3_res,random = T)
-saveRDS(wave3_res,"wave3_mcmc.rds")
+saveRDS(wave3_res,here("model_output","wave3_mcmc.rds"))
 
 plot_a <- wave2_change_plot+wave3_change_plot+plot_layout(guides="collect")&
   theme(legend.position = "bottom")&
@@ -79,7 +66,7 @@ plot_a <- wave2_change_plot+wave3_change_plot+plot_layout(guides="collect")&
   labs(x="")&
   scale_colour_brewer("Increase post-wave",type="qual",palette = "Set1",labels=c("No","Yes"),direction=-1)
 
-ggsave("change_plot.png",width=210,height=150,units="mm",dpi=600,bg="white")
+ggsave(here("results", "change_plot.png"),width=210,height=150,units="mm",dpi=600,bg="white")
 
 (wave2_plot <- mmcc::tidy(as.mcmc(wave2_res)) %>% 
   filter(str_detect(parameter,"S")) %>% 
@@ -129,10 +116,10 @@ plot_b <- wave2_plot+wave3_plot&
   scale_fill_brewer()&
   coord_cartesian(xlim=c(0.5,1000),expand=F)
 
-ggsave("res_logistic.png",width=210,height=150,units="mm",dpi=600,bg="white")
+ggsave(here("results", "res_logistic.png"),width=210,height=150,units="mm",dpi=600,bg="white")
 
 (plot_a/plot_b)+plot_annotation(tag_levels = "A")
-ggsave("combined.png",width=210,height=210,units="mm",dpi=600,bg="white")
+ggsave(here("results","combined.png"),width=210,height=210,units="mm",dpi=600,bg="white")
 
 
 #Table 1
@@ -195,5 +182,5 @@ wave2_gof+wave3_gof+ancestral_vs_delta_gof&
   scale_fill_brewer()&
   coord_cartesian(xlim=c(0.5,1000),expand=F)
 
-ggsave("combined_gof.png",width=300,height=100,units="mm",dpi=600,bg="white")
+ggsave(here("results","combined_gof.png"),width=300,height=100,units="mm",dpi=600,bg="white")
 
