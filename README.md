@@ -2,7 +2,7 @@
 
 To run, open `covid_seroconv.Rproj` file. 
 
-Main analysis (WT vs Beta and Beta vs Delta) in `protective_thresholds_beta_delta.R`; supplementary analysis on WT vs Delta in `protective_thresholds_wt_vs_delta.R`. Plots produced and placed in `results` and tables produced in script at HTMLS.
+Main analysis (WT vs Beta and Beta vs Delta) in `protective_thresholds_beta_delta.R`; supplementary analysis on WT vs Delta in `protective_thresholds_wt_vs_delta.R`. Plots produced and placed in `results` and tables produced in script as HTML.
 
 
 Model and utility functions in `utils.R`.
