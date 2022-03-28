@@ -4,7 +4,7 @@
 ##############
 source("scripts/utils.R")
 
-wv2WB <- calc_wave(2, "WT", "Beta")
+wv2WB <- calc_wave(wav=2, preVar="WT", postVar="Beta", threshold=.10)
 wv3WD <- calc_wave(3, "WT", "Delta")
 wv4WO <- calc_wave(4, "WT", "Omicron")
 

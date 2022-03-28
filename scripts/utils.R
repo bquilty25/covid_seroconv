@@ -124,14 +124,14 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(wav, preVar, postVar){
+calc_wave <- function(wav, preVar, postVar, threshold=.10){
   
   wave_dat <- datw4 %>% 
     filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
     select(-variant) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
     pivot_wider(values_from = value,names_from = wave) %>% 
-    mutate(increase_2_v_1=as.integer(post > pre*1.1)) %>% #serconversion defined as 10% increase
+    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold))) %>% #serconversion defined as 10% increase
     drop_na(pre,post)
   
   #plot individual level change in titre
