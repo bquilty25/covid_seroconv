@@ -1,7 +1,7 @@
 require("pacman")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here)
-remotes::install_github("njtierney/mmcc")
-library(mmcc)
+#remotes::install_github("njtierney/mmcc")
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc)
+
 
 lseq <- function(from=1, to=100000, length.out=6) {
   # logarithmic spaced sequence
@@ -86,7 +86,7 @@ run_model <- function(data.list){
     #b=runif(1,0.01,0.99),
     c=runif(1,0.01,0.5))}
   
-  jags(model.file=model,
+  jags.parallel(model.file=model,
        data=data.list,
        parameters.to.save=c("S",
                             "b",
@@ -100,9 +100,8 @@ run_model <- function(data.list){
                             "lambda1",
                             "lambda2"),
        #inits=inits,
-       n.iter=1e5,
-       n.chains = 2,
-       n.burnin = 1e4)
+       n.iter=2000,
+       n.chains = 4)
   
 }
 
