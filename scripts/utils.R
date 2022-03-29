@@ -19,13 +19,15 @@ dat <- read_xlsx(here("data","SARS_CoV2_data_3_waves_15dec2021.xlsx"),sheet = 2)
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) 
 
-#Load and clean wave 4 data
-datw4 <- read_xlsx(here("data","data_for_billy_all_4waves_339_28MAR2022.xlsx"),sheet = 1) %>% 
-  pivot_longer(CoV2S_w1_m:omicrom_w4_m) %>% 
+#Load and clean wave 1-4 data
+datw4 <- read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
+  #filter(is.na(mat_vacc_covid)) %>% #exclude those who ever got vaccinated
+  select(pid_child:omicron_4w_m) %>%
+  pivot_longer(CoV2S_1w_m:omicron_4w_m) %>% 
   mutate(variant=case_when(str_detect(name,"CoV")~"WT",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta",
-                           str_detect(name,"omicrom")~"Omicron"),
+                           str_detect(name,"omicro")~"Omicron"),
          variant=fct_relevel(variant,"WT","Beta","Delta","Omicron"),
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) 
@@ -124,9 +126,9 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(wav, preVar, postVar, threshold=.10){
+calc_wave <- function(dat, wav, preVar, postVar, threshold=.10){
   
-  wave_dat <- datw4 %>% 
+  wave_dat <- dat %>% 
     filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
     select(-variant) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%

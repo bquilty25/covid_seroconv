@@ -4,17 +4,17 @@
 ##############
 source("scripts/utils.R")
 
-wv2WB <- calc_wave(wav=2, preVar="WT", postVar="Beta", threshold=.10)
-wv3WD <- calc_wave(3, "WT", "Delta")
-wv4WO <- calc_wave(4, "WT", "Omicron")
+wv2WB <- calc_wave(dat=datw4, wav=2, preVar="WT", postVar="Beta", threshold=.10)
+wv3WD <- calc_wave(datw4, 3, "WT", "Delta")
+wv4WO <- calc_wave(datw4, 4, "WT", "Omicron")
 
-wv2BB <- calc_wave(2, "Beta", "Beta")
-wv3BD <- calc_wave(3, "Beta", "Delta")
-wv4BO <- calc_wave(4, "Beta", "Omicron")
+wv2BB <- calc_wave(datw4, 2, "Beta", "Beta")
+wv3BD <- calc_wave(datw4, 3, "Beta", "Delta")
+wv4BO <- calc_wave(datw4, 4, "Beta", "Omicron")
 
-wv4DO <- calc_wave(4, "Delta", "Omicron")
+wv4DO <- calc_wave(datw4, 4, "Delta", "Omicron")
 
-wv4OO <- calc_wave(4, "Omicron", "Omicron")
+wv4OO <- calc_wave(datw4, 4, "Omicron", "Omicron")
 
 results <- rbind(wv2WB,wv3WD,wv4WO,
       wv2BB,wv3BD,wv4BO,
