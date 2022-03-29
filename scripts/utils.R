@@ -22,6 +22,7 @@ dat <- read_xlsx(here("data","SARS_CoV2_data_3_waves_15dec2021.xlsx"),sheet = 2)
 #Load and clean wave 1-4 data
 datw4 <- read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
   filter(is.na(mat_vacc_covid)) %>% #exclude those who ever got vaccinated
+  #filter(vacc_before_wave3_collection == 1) %>% #include only who got vaccinated before post wave 3 bloods
   select(pid_child:omicron_4w_m) %>%
   pivot_longer(CoV2S_1w_m:omicron_4w_m) %>% 
   mutate(variant=case_when(str_detect(name,"CoV")~"WT",
