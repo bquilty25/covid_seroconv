@@ -4,6 +4,21 @@
 ##############
 source("scripts/utils.R")
 
+# plot corellation of variant specific IgG with wild type
+datw4 %>%
+  pivot_wider(names_from = variant, values_from = value) %>%
+  pivot_longer(cols = Beta:Omicron, names_to = "Variant", values_to = "Other") %>%
+  ggplot(aes(x=WT, y=Other, color = factor(wave))) +
+  geom_point(size = 2, alpha =.2, stroke = 1) + 
+  geom_abline(slope = 1, intercept = 0, lty = "dashed", lwd = 1, alpha=.5)+
+  scale_x_log10() + scale_y_log10() +
+  scale_colour_brewer("Titres after wave",type="qual",palette = "Set2", labels=c("WT","Beta", "Delta","Omicron"), direction=-1)+
+  facet_wrap(.~Variant) +
+  theme_classic()
+ggsave("results/titre_cor.png",width=200,height=80,units="mm",dpi=600,bg="white")
+
+
+# run models
 wv2WB <- calc_wave(dat=datw4, wav=2, preVar="WT", postVar="Beta", threshold=.10)
 wv3WD <- calc_wave(datw4, 3, "WT", "Delta")
 wv4WO <- calc_wave(datw4, 4, "WT", "Omicron")
