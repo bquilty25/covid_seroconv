@@ -4,7 +4,7 @@
 ##############
 source("scripts/utils.R")
 
-# plot corellation of variant specific IgG with wild type
+## plot correlation of variant specific IgG with wild type
 datw4 %>%
   pivot_wider(names_from = variant, values_from = value) %>%
   pivot_longer(cols = Beta:Omicron, names_to = "Variant", values_to = "Other") %>%
@@ -18,23 +18,23 @@ datw4 %>%
 ggsave("results/titre_cor.png",width=200,height=80,units="mm",dpi=600,bg="white")
 
 
-# run models
-wv2WB <- calc_wave(dat=datw4, wav=2, preVar="WT", postVar="Beta", threshold=.10)
-wv3WD <- calc_wave(datw4, 3, "WT", "Delta")
-wv4WO <- calc_wave(datw4, 4, "WT", "Omicron")
+## run models
+#wv2WB <- calc_wave(dat=datw4, wav=2, preVar="WT", postVar="Beta", threshold=.1)
+#wv3WD <- calc_wave(datw4, 3, "WT", "Delta")
+#wv4WO <- calc_wave(datw4, 4, "WT", "Omicron")
+#wv2BB <- calc_wave(datw4, 2, "Beta", "Beta")
+#wv3BD <- calc_wave(datw4, 3, "Beta", "Delta")
+#wv4BO <- calc_wave(datw4, 4, "Beta", "Omicron")
+#wv4DO <- calc_wave(datw4, 4, "Delta", "Omicron")
+#wv4OO <- calc_wave(datw4, 4, "Omicron", "Omicron")
 
-wv2BB <- calc_wave(datw4, 2, "Beta", "Beta")
-wv3BD <- calc_wave(datw4, 3, "Beta", "Delta")
-wv4BO <- calc_wave(datw4, 4, "Beta", "Omicron")
+wv2WW <- calc_wave(datw4, 2, "WT", "WT",.1)
+wv3WW <- calc_wave(datw4, 3, "WT", "WT",.1)
+wv4WW <- calc_wave(datw4, 4, "WT", "WT",.1)
 
-wv4DO <- calc_wave(datw4, 4, "Delta", "Omicron")
-
-wv4OO <- calc_wave(datw4, 4, "Omicron", "Omicron")
-
-results <- rbind(wv2WB,wv3WD,wv4WO,
-      wv2BB,wv3BD,wv4BO,
-      wv4DO,
-      wv4OO) 
+results <- rbind(wv2WW,
+                 wv3WW,
+                 wv4WW) 
 saveRDS(results,here("model_output","wave_results.rds"))
 results %>%
   htmlTable::htmlTable(rownames = FALSE, header=c("Wave",
