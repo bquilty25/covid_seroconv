@@ -1,6 +1,6 @@
 require("pacman")
 #remotes::install_github("njtierney/mmcc")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc)
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML)
 
 
 lseq <- function(from=1, to=100000, length.out=6) {
@@ -44,14 +44,15 @@ extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){
     pivot_wider(values_from = "value",names_from = "parameter") %>% 
     mutate(x_pred=exp(-(log((c-y$median*mult)/(y$median*mult-a))/b)+tm)) %>% 
     summarise(x = quantile(x_pred, c(0.025, 0.5, 0.975),na.rm=T), q = c(0.025, 0.5, 0.975)) %>% 
-    pivot_wider(values_from = x,names_from = q)
+    pivot_wider(values_from = x,names_from = q) #%>% 
+    #mutate(`0.975`=ifelse(`0.975`>max(wave_dat$pre),Inf,`0.975`)) 
   
   y %>% bind_cols(x)
 }
 
 
 
-run_model <- function(data.list){
+run_model <- function(data.list,n_iter){
   
   model <- function(){
     
@@ -103,7 +104,7 @@ run_model <- function(data.list){
                             "lambda1",
                             "lambda2"),
        #inits=inits,
-       n.iter=2000,
+       n.iter=n_iter,
        n.chains = 4)
   
 }
@@ -127,7 +128,7 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(dat, wav, preVar, postVar, threshold=.10){
+calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag=F){
   
   wave_dat <- dat %>% 
     filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
@@ -158,10 +159,11 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10){
   pred_t_wave <- lseq(from=min(wave_dat$pre),to=max(wave_dat$pre),length.out = 1000)
   wave_res <- run_model(data.list = list(n=nrow(wave_dat)+length(pred_t_wave),
                                          Y=c(as.integer(wave_dat$increase_2_v_1),rep(NA,length(pred_t_wave))),
-                                         titre=c(log(wave_dat$pre),log(pred_t_wave))))
+                                         titre=c(log(wave_dat$pre),log(pred_t_wave))),
+                        n_iter=n_iter)
   
   #diagnostics
-  mcmcplot(wave_res,random = T)
+  if(diag){mcmcplot(wave_res,random = T)}
   
   #CoP estimate 
   (wave_plot <- mmcc::tidy(as.mcmc(wave_res)) %>% 
@@ -179,6 +181,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10){
                  aes(yintercept=median),
                  linetype="dashed")+
       scale_x_log10(paste(preVar,"S-specific IgG pre-wave (WHO BAU/ml)"))+
+      coord_cartesian(xlim=c(min(wave_dat$pre),max(wave_dat$pre)),expand = expansion(mult=0.01))+
       scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent)+
       theme_minimal()+
       theme(panel.border = element_rect(fill = NA))+ggtitle(paste("Wave",wav))
@@ -186,24 +189,48 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10){
   ggsave(paste0("results/waveplot",wav,preVar,postVar,".png"),wave_plot,width=120,height=100,units="mm",dpi=600,bg="white")
   
   #Tabled results
-  res <- mmcc::tidy(as.mcmc(wave_res)) %>% 
-    filter(parameter %in% c("a","c")) %>% 
-    mutate(across(c(median,`2.5%`,`97.5%`),function(x)x*100)) %>% 
-    bind_rows(extract_ab_thresholds(wave_res,thresh="a",mult=0.5) %>% 
-                mutate(parameter="a_0.5") %>% select(parameter,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
-    bind_rows(extract_ab_thresholds(wave_res,thresh="thresh_50") %>% 
-                select(parameter,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
-    bind_rows(extract_ab_thresholds(wave_res,thresh="thresh_80") %>% 
-                select(parameter,`2.5%`=`0.025`,median=`0.5`,`97.5%`=`0.975`)) %>% 
-    mutate(`97.5%`=ifelse(`97.5%`>1000,Inf,`97.5%`),
-           across(c(median,`2.5%`,`97.5%`),~formatC(.,digits=1,format = "f"))) %>% 
-    mutate(estimate=paste0(median, " (",`2.5%`,", ",`97.5%`,")")) %>% 
-    select(parameter,estimate) %>% 
-    pivot_wider(values_from = estimate,names_from = parameter) %>% 
-    select(a,c,thresh_50,thresh_80,a_0.5) %>% 
-    mutate(Wave = wav,
-           pre = preVar,
-           post = postVar, .before="a") 
+  res <- mmcc::tidy(as.mcmc(wave_res)) %>%
+    filter(parameter %in% c("a", "c")) %>%
+    mutate(across(c(median, `2.5%`, `97.5%`), function(x) x * 100)) %>%
+    bind_rows(
+      extract_ab_thresholds(wave_res, thresh = "a", mult = 0.5) %>%
+        mutate(parameter = "a_0.5") %>% select(
+          parameter,
+          `2.5%` = `0.025`,
+          median = `0.5`,
+          `97.5%` = `0.975`
+        )
+    ) %>%
+    bind_rows(
+      extract_ab_thresholds(wave_res, thresh = "thresh_50") %>%
+        select(
+          parameter,
+          `2.5%` = `0.025`,
+          median = `0.5`,
+          `97.5%` = `0.975`
+        )
+    ) %>%
+    bind_rows(
+      extract_ab_thresholds(wave_res, thresh = "thresh_80") %>%
+        select(
+          parameter,
+          `2.5%` = `0.025`,
+          median = `0.5`,
+          `97.5%` = `0.975`
+        )
+    ) %>%
+    mutate(`97.5%` = ifelse(`97.5%` > max(wave_dat$pre), Inf, `97.5%`),
+           across(c(median, `2.5%`, `97.5%`),  ~ formatC(., digits = 1, format = "f"))) %>%
+    mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`, ")")) %>%
+    select(parameter, estimate) %>%
+    pivot_wider(values_from = estimate, names_from = parameter) %>%
+    select(a, c, thresh_50, thresh_80, a_0.5) %>%
+    mutate(
+      Wave = wav,
+      pre = preVar,
+      post = postVar,
+      .before = "a"
+    ) 
   
   #goodness of fit
   (wave_gof <- remove_geom(wave_plot,"GeomPointrange")+
@@ -220,7 +247,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10){
   )
   ggsave(paste0("results/wave_gof",wav,preVar,postVar,".png"),wave_gof,width=120,height=100,units="mm",dpi=600,bg="white")
   
-  return(res)
+  return(list(res=res,wave_change_plot=wave_change_plot,wave_plot=wave_plot))
 }
 
 
