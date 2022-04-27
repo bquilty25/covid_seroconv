@@ -14,6 +14,8 @@ source("scripts/utils.R")
 #wv4DO <- calc_wave(datw4, 4, "Delta", "Omicron")
 #wv4OO <- calc_wave(datw4, 4, "Omicron", "Omicron")
 
+#WT
+
 wv2WW <- calc_wave(datw4, 2, "WT", "WT",.1)
 wv3WW <- calc_wave(datw4, 3, "WT", "WT",.1)
 wv4WW <- calc_wave(datw4, 4, "WT", "WT",.1)
@@ -21,9 +23,11 @@ wv4WW <- calc_wave(datw4, 4, "WT", "WT",.1)
 results <- rbind(wv2WW$res,
                  wv3WW$res,
                  wv4WW$res) 
+
 saveRDS(results,here("model_output","wave_results.rds"))
+
 (result_tab <- results %>%
-  htmlTable::htmlTable(rownames = FALSE, header=c("Wave",
+  htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
                                                 "Variant assessed before wave",
                                                 "Variant assessed after wave",
                                                 "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
@@ -31,7 +35,6 @@ saveRDS(results,here("model_output","wave_results.rds"))
                                                 "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
                                                 "80% reduction threshold (WHO BAU/ml, median, 95% CrI)",
                                                 "IgG titres required to reduce probability of seroconversion by 50% (WHO BAU/ml, median, 95% CrI)")))
-
 
 plots <- list(wv2WW$wave_change_plot,
               wv3WW$wave_change_plot,
@@ -45,4 +48,40 @@ plots <- list(wv2WW$wave_change_plot,
 
 ggsave(filename = here("results","combined_plot_wt.png"),width = 400,height = 250,units = "mm",dpi=600,bg="white")
 
-write(result_tab, here("results","wave_results.html"))
+write(result_tab, here("results","wt_wave_results.html"))
+
+#WT vs. wave specific variants
+
+wv2beta <- calc_wave(datw4, 2, "WT", "Beta",.1)
+wv3delta <- calc_wave(datw4, 3, "WT", "Delta",.1)
+wv4omi <- calc_wave(datw4, 4, "WT", "Omicron",.1,browsing = T)
+
+results <- rbind(wv2beta$res,
+                 wv3delta$res,
+                 wv4omi$res) 
+
+saveRDS(results,here("model_output","wave_results_wave_specific.rds"))
+
+(result_tab <- results %>%
+    htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
+                                                    "Variant assessed before wave",
+                                                    "Variant assessed after wave",
+                                                    "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
+                                                    "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
+                                                    "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                    "80% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                    "IgG titres required to reduce probability of seroconversion by 50% (WHO BAU/ml, median, 95% CrI)")))
+
+plots <- list(wv2beta$wave_change_plot,
+              wv3delta$wave_change_plot,
+              wv4omi$wave_change_plot,
+              guide_area(),
+              wv2beta$wave_plot,
+              wv3delta$wave_plot,
+              wv4omi$wave_plot) 
+
+(wrap_plots(plots,nrow=2,widths = c(1,1,1,0.5))+plot_layout(guides = "collect"))
+
+ggsave(filename = here("results","combined_plot_wave_specific.png"),width = 400,height = 250,units = "mm",dpi=600,bg="white")
+
+write(result_tab, here("results","wave_specific_results.html"))

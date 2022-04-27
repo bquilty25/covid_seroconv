@@ -128,7 +128,9 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag=F){
+calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag=F,browsing=F){
+
+  if(browsing){browser()}
   
   wave_dat <- dat %>% 
     filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
@@ -184,7 +186,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag
       coord_cartesian(xlim=c(min(wave_dat$pre),max(wave_dat$pre)),expand = expansion(mult=0.01))+
       scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent)+
       theme_minimal()+
-      theme(panel.border = element_rect(fill = NA))+ggtitle(paste("Wave",wav))
+      theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())+ggtitle(paste("Wave",wav))
   )
   ggsave(paste0("results/waveplot",wav,preVar,postVar,".png"),wave_plot,width=120,height=100,units="mm",dpi=600,bg="white")
   
@@ -219,9 +221,10 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag
           `97.5%` = `0.975`
         )
     ) %>%
-    mutate(`97.5%` = ifelse(`97.5%` > max(wave_dat$pre), Inf, `97.5%`),
-           across(c(median, `2.5%`, `97.5%`),  ~ formatC(., digits = 1, format = "f"))) %>%
-    mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`, ")")) %>%
+    mutate(across(c(median, `2.5%`, `97.5%`),  ~ formatC(., digits = 1, format = "f")),
+           `97.5%` = case_when(as.numeric(`97.5%`) > max(wave_dat$pre) ~ paste0(">",plyr::round_any(max(wave_dat$pre),500)), 
+                               TRUE ~ `97.5%`)) %>%
+    mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`,")")) %>% #ifelse(!(`97.5%`%%500),paste(">",`97.5%`),`97.5%`), ")"),) %>%
     select(parameter, estimate) %>%
     pivot_wider(values_from = estimate, names_from = parameter) %>%
     select(a, c, thresh_50, thresh_80, a_0.5) %>%
