@@ -52,9 +52,11 @@ wave = read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vacci
   select(pid_child, CollectionDate_1w_m, CollectionDate_2w_m, CollectionDate_3w_m, CollectionDate_4w_m) %>%
   pivot_longer(cols = -1, names_pattern = "(.*)(....)$", names_to = c("cat","wave"), values_to = "Date")
 merge(IgG, wave, by=c("pid_child","wave")) %>%
-  tibble() %>%
-  select(pid_child, wave, IgG, Date) %>%
-  ggplot(aes(x=Date, y=IgG, group=pid_child)) +
+  tibble() #%>%
+  
+datw4 %>%   
+  #select(pid_child, wave, IgG, Date) %>%
+  ggplot(aes(x=Date, y=value, group=pid_child)) +
     geom_point(alpha = .3) +
     geom_line(alpha = .1) +
     xlab("") + ylab("WT IgG titre") +

@@ -64,9 +64,9 @@ datw4 %>% drop_na(value) %>%
 
 #WT vs. wave specific variants
 
-wv2beta <- calc_wave(datw4_vacc, 2, "WT", "Beta",.1)
-wv3delta <- calc_wave(datw4_vacc, 3, "WT", "Delta",.1)
-wv4omi <- calc_wave(datw4_vacc, 4, "WT", "Omicron",.1,browsing = T)
+wv2beta <- calc_wave(datw4, 2, "WT", "Beta",.1)
+wv3delta <- calc_wave(datw4, 3, "WT", "Delta",.1)
+wv4omi <- calc_wave(datw4, 4, "WT", "Omicron",.1,browsing = T)
 
 results <- rbind(wv2beta$res,
                  wv3delta$res,
@@ -104,7 +104,7 @@ write(result_tab, here("results","wave_specific_results.html"))
 
 #wv2WW_vacc <- calc_wave(datw4, vacc=T, 2, "WT", "WT",.01)
 #wv3WW_vacc <- calc_wave(datw4, vacc=T, 3, "WT", "WT",.01)
-wv4WW_vacc <- calc_wave(datw4, vacc=T, 4, "WT", "WT",.01,browsing = T)
+wv4WW_vacc <- calc_wave(datw4, vacc=T, 4, "WT", "WT",.01,browsing = F)
 
 (result_tab <- wv4WW_vacc$res %>%
     htmlTable::htmlTable(rnames = FALSE, header=c("Wave",

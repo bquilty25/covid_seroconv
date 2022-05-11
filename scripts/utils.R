@@ -20,18 +20,20 @@ lseq <- function(from=1, to=100000, length.out=6) {
 #   select(-name) 
 
 #Load and clean wave 1-4 data
-datw4 <- read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
-  #filter(is.na(mat_vacc_covid)) %>% #exclude those who ever got vaccinated
-  #filter(vacc_before_wave3_collection == 1) %>% #include only who got vaccinated before post wave 3 bloods
-  select(pid_child:omicron_4w_m,mat_vacc_covid) %>%
-  pivot_longer(CoV2S_1w_m:omicron_4w_m) %>% 
-  mutate(variant=case_when(str_detect(name,"CoV")~"WT",
+datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>% 
+  rename_all(~stringr::str_replace(.,"^S","")) %>% 
+  rename_all(tolower) %>%
+  select(c(pid_child:mat_vacc_covid),-contains("collection"),-contains("barcode"),-contains("cat"),contains("before")) %>%
+  pivot_longer(cov2s_1w_m:omicron_4w_m) %>% 
+  mutate(variant=case_when(str_detect(name,"cov")~"WT",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta",
-                           str_detect(name,"omicro")~"Omicron"),
+                           str_detect(name,"omicron")~"Omicron"),
          variant=fct_relevel(variant,"WT","Beta","Delta","Omicron"),
          wave=parse_number(str_sub(name,start=-4))) %>% 
-  select(-name) 
+  select(-name) %>% 
+  mutate(vacc_pre_wave=case_when(vacc_before_wave2_collection==1&wave==1~TRUE,
+         TRUE~FALSE))
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
 extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){
@@ -128,14 +130,14 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(dat, vacc=F, wav, preVar, postVar, threshold=.10, n_iter=5000,diag=F,browsing=F){
+calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, vacc=F, n_iter=5000,diag=F,browsing=F){
 
   if(browsing){browser()}
   
   if(vacc){
-  dat <- dat %>% filter(!is.na(mat_vacc_covid))  #exclude those who ever got vaccinated
+  dat <- dat %>% filter(vacc_any==1)%>% filter(vacc_before_wave3_collection == 1)   #include only those who ever got vaccinated
   } else{
-  dat <- dat %>% filter(is.na(mat_vacc_covid)) %>% filter(vacc_before_wave3_collection == 1)  #include only those who ever got vaccinated
+  dat <- dat %>% filter(vacc_any==0)  #exclude those who ever got vaccinated
   }
   
   wave_dat <- dat %>% 
