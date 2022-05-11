@@ -10,20 +10,20 @@ lseq <- function(from=1, to=100000, length.out=6) {
 }
 
 #Load and clean data
-dat <- read_xlsx(here("data","SARS_CoV2_data_3_waves_15dec2021.xlsx"),sheet = 2) %>% 
-  pivot_longer(CoV2S_1w_m:delta_3w_m) %>% 
-  mutate(variant=case_when(str_detect(name,"CoV2")~"WT",
-                           str_detect(name,"beta")~"Beta",
-                           str_detect(name,"delta")~"Delta"),
-         variant=fct_relevel(variant,"WT","Beta","Delta"),
-         wave=parse_number(str_sub(name,start=-4))) %>% 
-  select(-name) 
+# dat <- read_xlsx(here("data","SARS_CoV2_data_3_waves_15dec2021.xlsx"),sheet = 2) %>% 
+#   pivot_longer(CoV2S_1w_m:delta_3w_m) %>% 
+#   mutate(variant=case_when(str_detect(name,"CoV2")~"WT",
+#                            str_detect(name,"beta")~"Beta",
+#                            str_detect(name,"delta")~"Delta"),
+#          variant=fct_relevel(variant,"WT","Beta","Delta"),
+#          wave=parse_number(str_sub(name,start=-4))) %>% 
+#   select(-name) 
 
 #Load and clean wave 1-4 data
 datw4 <- read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
-  filter(is.na(mat_vacc_covid)) %>% #exclude those who ever got vaccinated
+  #filter(is.na(mat_vacc_covid)) %>% #exclude those who ever got vaccinated
   #filter(vacc_before_wave3_collection == 1) %>% #include only who got vaccinated before post wave 3 bloods
-  select(pid_child:omicron_4w_m) %>%
+  select(pid_child:omicron_4w_m,mat_vacc_covid) %>%
   pivot_longer(CoV2S_1w_m:omicron_4w_m) %>% 
   mutate(variant=case_when(str_detect(name,"CoV")~"WT",
                            str_detect(name,"beta")~"Beta",
@@ -128,9 +128,15 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag=F,browsing=F){
+calc_wave <- function(dat, vacc=F, wav, preVar, postVar, threshold=.10, n_iter=5000,diag=F,browsing=F){
 
   if(browsing){browser()}
+  
+  if(vacc){
+  dat <- dat %>% filter(!is.na(mat_vacc_covid))  #exclude those who ever got vaccinated
+  } else{
+  dat <- dat %>% filter(is.na(mat_vacc_covid)) %>% filter(vacc_before_wave3_collection == 1)  #include only those who ever got vaccinated
+  }
   
   wave_dat <- dat %>% 
     filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
@@ -192,7 +198,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag
   
   #Tabled results
   res <- mmcc::tidy(as.mcmc(wave_res)) %>%
-    filter(parameter %in% c("a", "c")) %>%
+    filter(parameter %in% c("a", "c", "exp_tm")) %>%
     mutate(across(c(median, `2.5%`, `97.5%`), function(x) x * 100)) %>%
     bind_rows(
       extract_ab_thresholds(wave_res, thresh = "a", mult = 0.5) %>%
@@ -224,10 +230,10 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, n_iter=5000,diag
     mutate(across(c(median, `2.5%`, `97.5%`),  ~ formatC(., digits = 1, format = "f")),
            `97.5%` = case_when(as.numeric(`97.5%`) > max(wave_dat$pre) ~ paste0(">",plyr::round_any(max(wave_dat$pre),500)), 
                                TRUE ~ `97.5%`)) %>%
-    mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`,")")) %>% #ifelse(!(`97.5%`%%500),paste(">",`97.5%`),`97.5%`), ")"),) %>%
+    mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`,")")) %>% 
     select(parameter, estimate) %>%
     pivot_wider(values_from = estimate, names_from = parameter) %>%
-    select(a, c, thresh_50, thresh_80, a_0.5) %>%
+    select(a, c, thresh_50, thresh_80, a_0.5, tm, exp_tm) %>%
     mutate(
       Wave = wav,
       pre = preVar,
