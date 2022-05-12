@@ -102,8 +102,8 @@ write(result_tab, here("results","wave_specific_results.html"))
 # Vaccinated
 #WT
 
-#wv2WW_vacc <- calc_wave(datw4, vacc=T, 2, "WT", "WT",.01)
-#wv3WW_vacc <- calc_wave(datw4, vacc=T, 3, "WT", "WT",.01)
+wv2WW_vacc <- calc_wave(datw4, vacc=T, 2, "WT", "WT",.01)
+wv3WW_vacc <- calc_wave(datw4, vacc=T, 3, "WT", "WT",.01,browsing = F)
 wv4WW_vacc <- calc_wave(datw4, vacc=T, 4, "WT", "WT",.01,browsing = F)
 
 (result_tab <- wv4WW_vacc$res %>%

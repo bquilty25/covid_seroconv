@@ -43,26 +43,29 @@ read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx
     theme_classic()
 
 # WT IgG by collection date
-IgG = read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
-  filter(is.na(mat_vacc_covid)) %>%
-  select(pid_child, CoV2S_1w_m, CoV2S_2w_m, CoV2S_3w_m, CoV2S_4w_m) %>%
-  pivot_longer(cols = -1, names_pattern = "(.*)(....)$", names_to = c("strain","wave"), values_to = "IgG")
-wave = read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
-  filter(is.na(mat_vacc_covid)) %>%
-  select(pid_child, CollectionDate_1w_m, CollectionDate_2w_m, CollectionDate_3w_m, CollectionDate_4w_m) %>%
-  pivot_longer(cols = -1, names_pattern = "(.*)(....)$", names_to = c("cat","wave"), values_to = "Date")
-merge(IgG, wave, by=c("pid_child","wave")) %>%
-  tibble() #%>%
+# IgG = read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
+#   filter(is.na(mat_vacc_covid)) %>%
+#   select(pid_child, CoV2S_1w_m, CoV2S_2w_m, CoV2S_3w_m, CoV2S_4w_m) %>%
+#   pivot_longer(cols = -1, names_pattern = "(.*)(....)$", names_to = c("strain","wave"), values_to = "IgG")
+# wave = read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
+#   filter(is.na(mat_vacc_covid)) %>%
+#   select(pid_child, CollectionDate_1w_m, CollectionDate_2w_m, CollectionDate_3w_m, CollectionDate_4w_m) %>%
+#   pivot_longer(cols = -1, names_pattern = "(.*)(....)$", names_to = c("cat","wave"), values_to = "Date")
+# merge(IgG, wave, by=c("pid_child","wave")) %>%
+#   tibble() #%>%
   
-datw4 %>%   
+datw4 %>%  filter(variant=="WT") %>% 
   #select(pid_child, wave, IgG, Date) %>%
-  ggplot(aes(x=Date, y=value, group=pid_child)) +
-    geom_point(alpha = .3) +
-    geom_line(alpha = .1) +
+  ggplot(aes(x=collection_date, y=igg, group=pid_child,colour=vaccinated)) +
+    geom_point(alpha = .3,#aes(colour=vaccinated)
+               size=2,
+               ) +
+    geom_line(alpha = .2) +
     xlab("") + ylab("WT IgG titre") +
     scale_y_log10() +
     scale_x_datetime(labels = date_format("%Y %b"),
                      date_breaks = "3 month") +
-    theme_classic()
+    theme_classic()+
+    scale_color_brewer(palette = "Set1")
 
 

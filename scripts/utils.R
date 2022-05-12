@@ -23,8 +23,9 @@ lseq <- function(from=1, to=100000, length.out=6) {
 datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
   rename_all(tolower) %>%
-  select(c(pid_child:mat_vacc_covid),-contains("collection"),-contains("barcode"),-contains("cat"),contains("before")) %>%
-  pivot_longer(cov2s_1w_m:omicron_4w_m) %>% 
+  rename("mat_vacc_cov_date_2" =mat_cov_vacc_date_2 ) %>% 
+  select(c(pid_child:omicron_4w_m),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
+  pivot_longer(cov2s_1w_m:omicron_4w_m,values_to = "igg") %>% 
   mutate(variant=case_when(str_detect(name,"cov")~"WT",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta",
@@ -32,8 +33,18 @@ datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>%
          variant=fct_relevel(variant,"WT","Beta","Delta","Omicron"),
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) %>% 
-  mutate(vacc_pre_wave=case_when(vacc_before_wave2_collection==1&wave==1~TRUE,
-         TRUE~FALSE))
+  left_join(
+    read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>% 
+      rename_all(~stringr::str_replace(.,"^S","")) %>% 
+      rename_all(tolower) %>% 
+      select(pid_child,contains("collectiondate")) %>% 
+      pivot_longer(collectiondate_1w_m:collectiondate_4w_m, values_to="collection_date") %>% 
+      mutate(wave=parse_number(str_sub(name))) %>% 
+      select(-name)
+  ) %>% 
+  mutate(vaccinated=(collection_date>mat_vacc_cov_date_1)|(collection_date>mat_vacc_cov_date_2)) %>% 
+  select(-c(mat_vacc_cov_date_1,mat_vacc_cov_date_2)) %>% 
+  replace_na(list(vaccinated=F))
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
 extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1){
@@ -130,22 +141,16 @@ remove_geom <- function(ggplot2_object, geom_type) {
 ###########################################
 # define function to produce all the required results
 ###########################################
-calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, vacc=F, n_iter=5000,diag=F,browsing=F){
+calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, vacc=F, n_iter=10000,diag=F,browsing=F){
 
   if(browsing){browser()}
   
-  if(vacc){
-  dat <- dat %>% filter(vacc_any==1)%>% filter(vacc_before_wave3_collection == 1)   #include only those who ever got vaccinated
-  } else{
-  dat <- dat %>% filter(vacc_any==0)  #exclude those who ever got vaccinated
-  }
-  
   wave_dat <- dat %>% 
-    filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
-    select(-variant) %>% 
+    filter( (variant == preVar & wave == wav-1 & vaccinated==vacc) | (variant == postVar & wave == wav & vaccinated==vacc)) %>% 
+    select(-c(variant,collection_date)) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
-    pivot_wider(values_from = value,names_from = wave) %>% 
-    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold))) %>% #serconversion defined as 10% increase
+    pivot_wider(values_from = igg,names_from = wave) %>% 
+    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold))) %>% 
     drop_na(pre,post)
   
   #plot individual level change in titre
@@ -201,7 +206,9 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, vacc=F, n_iter=5
   #Tabled results
   res <- mmcc::tidy(as.mcmc(wave_res)) %>%
     filter(parameter %in% c("a", "c", "exp_tm")) %>%
-    mutate(across(c(median, `2.5%`, `97.5%`), function(x) x * 100)) %>%
+    pivot_longer(c(mean,sd,median, `2.5%`, `97.5%`)) %>% 
+    mutate(value=ifelse(parameter=="a"|parameter=="c",value*100,value)) %>%
+    pivot_wider(names_from = name,values_from = value) %>% 
     bind_rows(
       extract_ab_thresholds(wave_res, thresh = "a", mult = 0.5) %>%
         mutate(parameter = "a_0.5") %>% select(
@@ -235,7 +242,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.10, vacc=F, n_iter=5
     mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`,")")) %>% 
     select(parameter, estimate) %>%
     pivot_wider(values_from = estimate, names_from = parameter) %>%
-    select(a, c, thresh_50, thresh_80, a_0.5, tm, exp_tm) %>%
+    select(a, c, thresh_50, thresh_80, a_0.5, exp_tm) %>%
     mutate(
       Wave = wav,
       pre = preVar,
