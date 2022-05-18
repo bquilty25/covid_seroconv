@@ -66,9 +66,9 @@ datw4 %>% drop_na(value) %>%
 
 wv2beta <- calc_wave(datw4, 2, "WT", "Beta",.1)
 wv3delta <- calc_wave(datw4, 3, "WT", "Delta",.1)
-wv4omi <- calc_wave(datw4, 4, "WT", "Omicron",.1,browsing = T)
+wv4omi <- calc_wave(datw4, 4, "WT", "Omicron",.1)
 
-results <- rbind(wv2beta$res,
+results2 <- rbind(wv2beta$res,
                  wv3delta$res,
                  wv4omi$res) 
 
@@ -104,29 +104,43 @@ write(result_tab, here("results","wave_specific_results.html"))
 
 wv2WW_vacc <- calc_wave(datw4, vacc=T, 2, "WT", "WT",.01)
 wv3WW_vacc <- calc_wave(datw4, vacc=T, 3, "WT", "WT",.01,browsing = F)
-wv4WW_vacc <- calc_wave(datw4, vacc=T, 4, "WT", "WT",.01,browsing = F)
+wv4WW_vacc <- calc_wave(datw4, 4, "WT", "WT",.01,browsing = T)
 
-(result_tab <- wv4WW_vacc$res %>%
+
+results3 <- tribble(~doses_pre, ~doses_post, ~sero_pos_pre,
+                              0,          0,         FALSE,
+                              1,          1,         FALSE,
+                              2,          2,         FALSE,
+                              0,          1,         FALSE,
+                              0,          2,         FALSE,
+                              1,          2,         FALSE,
+                              0,          0,         TRUE,
+                              1,          1,         TRUE,
+                              2,          2,         TRUE,
+                              0,          1,         TRUE,
+                              0,          2,         TRUE,
+                              1,          2,         TRUE
+        ) %>%          
+  rowwise() %>% 
+  group_split() %>% 
+  map(~calc_wave(datw4, 4, "WT", "WT",doses_pre=.x$doses_pre,doses_post = .x$doses_post,sero_pos_pre = .x$sero_pos_pre,threshold = .01,browsing = F))
+
+(result_tab <- map(results3,1) %>% bind_rows() %>% 
     htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
                                                   "Variant assessed before wave",
                                                   "Variant assessed after wave",
+                                                  "Doses prior",
+                                                  "Doses post",
+                                                  "Only seropositives pre-wave",
                                                   "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
                                                   "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
-                                                  "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
-                                                  "80% reduction threshold (WHO BAU/ml, median, 95% CrI)",
-                                                  "IgG titres required to reduce probability of seroconversion by 50% (WHO BAU/ml, median, 95% CrI)")))
+                                                  "Y: 50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                  "Z: 80% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                  "Proportion of seropositives with pre-wave antibody titres higher than threshold Y",
+                                                  "Proportion of seropositives with pre-wave antibody titres higher than threshold Z",
+                                                  "N in subgroup",
+                                                  "N with increased titres")))
 
-plots <- list(wv2WW_vacc$wave_change_plot,
-              wv3WW_vacc$wave_change_plot,
-              wv4WW_vacc$wave_change_plot,
-              guide_area(),
-              wv2WW_vacc$wave_plot,
-              wv3WW_vacc$wave_plot,
-              wv4WW_vacc$wave_plot) 
-
-(wrap_plots(plots,nrow=2,widths = c(1,1,1,0.5))+plot_layout(guides = "collect"))
-
-ggsave(filename = here("results","combined_plot_wt.png"),width = 400,height = 250,units = "mm",dpi=600,bg="white")
 
 write(result_tab, here("results","wt_wave_results.html"))
 
@@ -141,3 +155,9 @@ datw4_vacc %>% drop_na(value) %>%
   group_by(wave) %>% 
   summarise(n=n(),
             protected_50=sum(value>a_0.5)/n)
+
+
+#hybrid immune,
+#stratify on dose
+#check unvaccinated to be pre and post wave
+#seropos after w3, stratify on 0, 1, 2, dose, and see if seroconvert in w4 stratified on whether they were dosed during w4

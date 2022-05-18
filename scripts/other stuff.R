@@ -54,18 +54,28 @@ read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx
 # merge(IgG, wave, by=c("pid_child","wave")) %>%
 #   tibble() #%>%
   
-datw4 %>%  filter(variant=="WT") %>% 
+sa_dat <- get_national_data(countries = "South Africa") 
+
+sa_plot <- sa_dat%>% 
+  mutate(date=as.Date(date)) %>% 
+  ggplot(aes(x=date,y=cases_new))+geom_col()+labs(x="Date",y="Daily reported cases")
+
+
+sero_time <- datw4 %>% 
+  mutate(collection_date=as.Date(collection_date)) %>% 
+  filter(variant=="WT") %>% 
+  arrange(-n_doses) %>% 
   #select(pid_child, wave, IgG, Date) %>%
-  ggplot(aes(x=collection_date, y=igg, group=pid_child,colour=vaccinated)) +
-    geom_point(alpha = .3,#aes(colour=vaccinated)
-               size=2,
-               ) +
-    geom_line(alpha = .2) +
-    xlab("") + ylab("WT IgG titre") +
-    scale_y_log10() +
-    scale_x_datetime(labels = date_format("%Y %b"),
-                     date_breaks = "3 month") +
-    theme_classic()+
-    scale_color_brewer(palette = "Set1")
+  ggplot(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses),alpha=factor(n_doses))) +
+  geom_point(size=1,
+  ) +
+  geom_line() +
+  xlab("") + ylab("WT IgG titre") +
+  scale_y_log10()
 
-
+(sero_time/sa_plot)&
+  scale_x_date(limits = c(as.Date("2020-01-01"),as.Date("2022-05-01")),date_labels = "%b %Y")&
+  theme_classic()&
+  scale_alpha_manual(values=c(0.1,0.2,0.2),guide="none")&
+  scale_color_manual("Number of doses recieved sampling",values=c("grey",brewer_pal(palette = "Set1",direction = -1)(2)))
+  
