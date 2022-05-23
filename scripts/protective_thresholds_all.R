@@ -108,12 +108,14 @@ wv4WW_vacc <- calc_wave(datw4, 4, "WT", "WT",.01,browsing = T)
 
 
 results3 <- tribble(~doses_pre, ~doses_post, ~sero_pos_pre,
+                            NA,          NA,         FALSE, #vaccine agnostic
                               0,          0,         FALSE,
                               1,          1,         FALSE,
                               2,          2,         FALSE,
                               0,          1,         FALSE,
                               0,          2,         FALSE,
                               1,          2,         FALSE,
+                             NA,         NA,         TRUE,
                               0,          0,         TRUE,
                               1,          1,         TRUE,
                               2,          2,         TRUE,
@@ -123,7 +125,15 @@ results3 <- tribble(~doses_pre, ~doses_post, ~sero_pos_pre,
         ) %>%          
   rowwise() %>% 
   group_split() %>% 
-  map(~calc_wave(datw4, 4, "WT", "WT",doses_pre=.x$doses_pre,doses_post = .x$doses_post,sero_pos_pre = .x$sero_pos_pre,threshold = .01,browsing = F))
+  map(~calc_wave(datw4, 
+                 4, 
+                 "WT", 
+                 "WT",
+                 doses_pre=.x$doses_pre,
+                 doses_post = .x$doses_post,
+                 sero_pos_pre = .x$sero_pos_pre,
+                 threshold = .01,
+                 browsing = T))
 
 (result_tab <- map(results3,1) %>% bind_rows() %>% 
     htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
