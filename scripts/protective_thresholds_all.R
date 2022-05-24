@@ -107,33 +107,24 @@ wv3WW_vacc <- calc_wave(datw4, vacc=T, 3, "WT", "WT",.01,browsing = F)
 wv4WW_vacc <- calc_wave(datw4, 4, "WT", "WT",.01,browsing = T)
 
 
-results3 <- tribble(~doses_pre, ~doses_post, ~sero_pos_pre,
-                            NA,          NA,         FALSE, #vaccine agnostic
-                              0,          0,         FALSE,
-                              1,          1,         FALSE,
-                              2,          2,         FALSE,
-                              0,          1,         FALSE,
-                              0,          2,         FALSE,
-                              1,          2,         FALSE,
-                             NA,         NA,         TRUE,
-                              0,          0,         TRUE,
-                              1,          1,         TRUE,
-                              2,          2,         TRUE,
-                              0,          1,         TRUE,
-                              0,          2,         TRUE,
-                              1,          2,         TRUE
-        ) %>%          
+results3 <- 
+  crossing(wav=c(2,3,4),
+           preVar=c("WT"),
+           vacc_agnostic_thresh=c(FALSE,TRUE),
+           sero_pos_pre=c(FALSE,TRUE)) %>% 
+  mutate(postVar=preVar) %>% 
+  select(wav,preVar,postVar,vacc_agnostic_thresh,sero_pos_pre) %>% 
+  filter(!(wav<4&!vacc_agnostic_thresh)) %>% 
   rowwise() %>% 
   group_split() %>% 
   map(~calc_wave(datw4, 
-                 4, 
-                 "WT", 
-                 "WT",
-                 doses_pre=.x$doses_pre,
-                 doses_post = .x$doses_post,
+                 wav =.x$wav, 
+                 preVar = .x$preVar, 
+                 postVar = .x$postVar,
+                 vacc_agnostic_thresh = .x$vacc_agnostic_thresh,
                  sero_pos_pre = .x$sero_pos_pre,
                  threshold = .01,
-                 browsing = T))
+                 browsing = F))
 
 (result_tab <- map(results3,1) %>% bind_rows() %>% 
     htmlTable::htmlTable(rnames = FALSE, header=c("Wave",

@@ -1,6 +1,6 @@
 require("pacman")
 #remotes::install_github("njtierney/mmcc")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,covidregionaldata,janitor)
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,covidregionaldata,janitor,sjPlot,fastDummies)
 
 
 lseq <- function(from=1, to=100000, length.out=6) {
@@ -64,46 +64,44 @@ extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1,...){
   y %>% bind_cols(x)
 }
 
-
-
 run_model <- function(data.list,n_iter){
-  
+ 
   model <- function(){
-    
+
     #Likelihood
-    for(i in 1:n)  
+    for(i in 1:n)
     {
-      
+
       S[i] <- a + (c-a)/(1+exp(-b*(titre[i]-tm)))
-      
+
       Y[i]~dbern(S[i])
-      
+
     }
-    
+
     #Priors
-    a~dbeta(1, 1) 
-    
+    a~dbeta(1, 1)
+
     b~dlnorm(1,tau1)
     tau1 <- pow(sigma1,-2)
     sigma1 ~ dunif(0.1,2)
-    
+
     c~dbeta(1, 1)
-    
+
     tm~dlnorm(1,tau2)
     tau2 <- pow(sigma2,-2)
     sigma2 ~ dunif(0.1,2)
-    
+
     exp_tm <- exp(tm)
-    
+
     thresh_80 <- 0.8*(c-a)+a
     thresh_50 <- 0.5*(c-a)+a
   }
-  
+
   inits <-  function(){list(
     a=runif(1,0.5,0.99),
     #b=runif(1,0.01,0.99),
     c=runif(1,0.01,0.5))}
-  
+
   jags.parallel(model.file=model,
        data=data.list,
        parameters.to.save=c("S",
@@ -120,8 +118,40 @@ run_model <- function(data.list,n_iter){
        #inits=inits,
        n.iter=n_iter,
        n.chains = 4)
-  
 }
+
+
+or_model <- function(data.list,n_iter){
+    
+    model <- function(){
+      
+      #Likelihood
+      for(i in 1:n)  
+        {
+        
+        Y[i]~dbern(S[i])
+        logit(S[i]) <- inprod(beta[],X[i,])
+        
+           }
+           #Priors
+             for (i in 1:ngroups) {
+               beta[i] ~ dnorm(0, 1.0E-6) 
+               }
+           sigma ~ dunif(0, 100)
+           tau <- 1 / (sigma * sigma)
+      }
+      
+    jags.parallel(model.file=model,
+                  data=data.list,
+                  parameters.to.save=c("S",
+                                       "beta",
+                                       "sigma"),
+                  #inits=inits,
+                  n.iter=n_iter,
+                  n.chains = 4)
+    
+  }
+
 
 remove_geom <- function(ggplot2_object, geom_type) {
   # Delete layers that match the requested type.
@@ -142,7 +172,7 @@ remove_geom <- function(ggplot2_object, geom_type) {
 
 #### define function to produce all the required results ----
 
-calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, doses_post=0, sero_pos_pre=FALSE, n_iter=5000,diag=F, browsing=F){
+calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=5000,diag=F, browsing=F){
 
   if(browsing){browser()}
   
@@ -156,31 +186,38 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
     
   }
   
-  if(is.na(doses_pre)|is.na(doses_post)){
+  if(vacc_agnostic_thresh){
     
     wave_dat <- dat %>% 
       filter( (variant == preVar & wave == wav-1 & igg > min_igg) | (variant == postVar & wave == wav)) 
     
   } else {
     
+    doses_pre=0
+    doses_post=0
+    
   wave_dat <- dat %>% 
       filter( (variant == preVar & wave == wav-1 & n_doses == doses_pre & igg > min_igg) | (variant == postVar & wave == wav & n_doses == doses_post)) 
   
   }
-  
-  doses_dat <- wave_dat %>% select(-c(variant,collection_date, igg)) %>% 
-    mutate(wave=ifelse(wave==wav-1,"doses_pre","doses_post")) %>% 
-    pivot_wider(values_from = n_doses,names_from = c(wave))
-  
-  model_dat <- wave_dat %>% 
+
+  wave_dat <- wave_dat %>% 
     select(-c(variant,collection_date, n_doses)) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
     pivot_wider(values_from = igg,names_from = wave) %>% 
     mutate(increase_2_v_1=as.integer(post > (pre*1+threshold))) %>% 
     drop_na(pre,post) %>% 
-    left_join(doses_dat)
+    left_join(dat %>% 
+                filter( (variant == preVar & wave == wav-1 & igg > min_igg) | (variant == postVar & wave == wav)) %>% 
+                select(-c(variant,collection_date, igg)) %>% 
+                mutate(wave=ifelse(wave==wav-1,"doses_pre","doses_post")) %>% 
+                pivot_wider(values_from = n_doses,names_from = c(wave))) %>% 
+    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold)))
   
-
+  model_dat <- wave_dat %>% 
+    filter(doses_pre==doses_post)
+ 
+ 
   #run model
   pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
   wave_res <- run_model(data.list = list(n=nrow(model_dat)+length(pred_t_wave),
@@ -188,8 +225,54 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
                                          titre=c(log(model_dat$pre),log(pred_t_wave))),
                         n_iter=n_iter)
   
+  #alt model
+  or_model_dat <- model_dat %>% 
+    mutate(doses_pre=factor(doses_pre,levels=c(0,1,2)),
+                                    log_pre=log(pre)) %>% 
+    filter(doses_pre==doses_post)
+  
+  or_res <- or_model(data.list = list(n=nrow(or_model_dat),
+                                         X=model.matrix(~doses_pre,or_model_dat),
+                                         ngroups=ncol(model.matrix(~doses_pre,or_model_dat)),
+                                         Y=c(as.integer(or_model_dat$increase_2_v_1)),
+                                         titre=c(or_model_dat$log_pre)),
+                        n_iter=n_iter*10)
+
+  or_res <- mmcc::tidy(as.mcmc(or_res)) %>% 
+    filter(str_detect(parameter,"beta")) %>% 
+    mutate_if(is.numeric,exp) %>% 
+    mutate(across(c(median, `2.5%`, `97.5%`),  ~ formatC(., digits = 2, format = "f")),
+           `97.5%` = case_when(as.numeric(`97.5%`) > max(model_dat$pre) ~ paste0(">",plyr::round_any(max(model_dat$pre),500)), 
+                               TRUE ~ `97.5%`)) %>%
+    mutate(estimate = paste0(median, " (", `2.5%`, ", ", `97.5%`,")")
+    ) %>% 
+    select(parameter, estimate) %>%
+    pivot_wider(values_from = c(estimate), names_from = parameter) 
+  
   #diagnostics
-  if(diag){mcmcplot(wave_res,random = T)}
+  
+  if(diag){mcmcplot(wave_res,parms = "beta")}
+  
+  proportion_protected <- doses_dat %>% 
+    bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
+                            filter(str_detect(parameter,"exp_tm"))) %>% 
+    mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){igg_pre>x}),.names="{fn}_{col}")) %>%
+    unite("doses", doses_pre,doses_post) %>% 
+    pivot_longer(c(`protected_2.5%`,`protected_median`,`protected_97.5%`)) %>% 
+    tabyl(doses,value,name) %>% 
+    adorn_totals("row") %>% 
+    adorn_percentages("row")  %>%  
+    adorn_pct_formatting(digits = 1)%>% 
+    adorn_ns() %>% 
+    bind_rows(.id="group") %>%
+    select(-`FALSE`) %>% 
+    pivot_wider(names_from = group,values_from = `TRUE`) %>% 
+    select(doses,protected_median,`protected_97.5%`,everything()) %>% 
+    bind_cols(doses_dat %>% 
+                group_by(doses_pre,doses_post) %>% 
+                count() %>% 
+                adorn_totals()) %>% 
+    select(-c(doses_pre,doses_post)) 
   
   #CoP estimate 
   (wave_plot <- mmcc::tidy(as.mcmc(wave_res)) %>% 
@@ -200,10 +283,10 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
       ggplot()+
       geom_smooth(aes(ymin=`2.5%`, ymax=`97.5%`,y=median,x=...4),colour="#2ca25f", fill="#99d8c9", stat="identity")+
       geom_point(data=model_dat,aes(y=as.integer(increase_2_v_1), x=pre),pch=124,size=5,alpha=0.5,colour="#2ca25f")+
-      geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_50") %>% pivot_wider(values_from = x,names_from = q) %>% 
-                        select(-c(mean,sd)),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
-      geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_80") %>% pivot_wider(values_from = x,names_from = q) %>% 
-                        select(-c(mean,sd)),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
+      # geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_50") %>% pivot_wider(values_from = x,names_from = q) %>% 
+      #                   select(-c(mean,sd)),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
+      # geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_80") %>% pivot_wider(values_from = x,names_from = q) %>% 
+      #                   select(-c(mean,sd)),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
       geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
                              filter(str_detect(parameter,"exp_tm")),aes(x=median,xmin=`2.5%`, xmax=`97.5%`,y=0.5))+
       geom_hline(data=mmcc::tidy(as.mcmc(wave_res)) %>%
@@ -223,22 +306,18 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
       mutate(variant=ifelse(name=="pre",paste0("pre (",preVar,")"),paste0("post (",postVar,")"))) %>% 
       mutate(variant=factor(variant, levels = c(paste0("pre (",preVar,")"),paste0("post (",postVar,")")))) %>%
       ggplot()+
-      geom_point(aes(x=variant,y=value,group=pid_child,colour=interaction(doses_pre,doses_post)),alpha=0.2)+
-      geom_path(aes(x=variant,y=value,group=pid_child,colour=interaction(doses_pre,doses_post)),alpha=0.2)+
+      geom_point(aes(x=variant,y=value,group=pid_child,colour=factor(doses_pre)),alpha=0.2)+
+      geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(doses_pre)),alpha=0.2)+
       scale_y_log10("S-specific IgG titre (WHO BAU/ml)",limits=c(NA,10000))+
       xlab("")+
       theme_minimal()+
       theme(panel.border = element_rect(fill = NA))+
-      scale_colour_manual("Increase\npost-wave",values=c("grey","#e41a1c"),labels=c("No","Yes"))+
+      #scale_colour_manual("Increase\npost-wave",values=c("grey","#e41a1c"),labels=c("No","Yes"))+
       ggtitle(paste0("Wave ",wav,", Doses pre: ",doses_pre,", Doses post: ", doses_post, ", Only seropositives: ", sero_pos_pre))+
-    geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_50") %>% pivot_wider(values_from = x,names_from = q) %>% 
-                      select(-c(mean,sd)),aes(y=`0.5`,ymin=`0.025`, ymax=`0.975`,x=0.9))+
-    geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_80") %>% pivot_wider(values_from = x,names_from = q) %>% 
-                      select(-c(mean,sd)),aes(y=`0.5`,ymin=`0.025`, ymax=`0.975`,x=1.1))+
-      geom_text(data=extract_ab_thresholds(wave_res,"thresh_50") %>% pivot_wider(values_from = x,names_from = q) %>% 
-                 select(-c(mean,sd)),aes(y=`0.5`,x=0.9, label="50% threshold"),hjust=1)+
-    geom_text(data=extract_ab_thresholds(wave_res,"thresh_50") %>% pivot_wider(values_from = x,names_from = q) %>% 
-               select(-c(mean,sd)),aes(y=`0.5`,x=1.1, label="80% threshold"),hjust=0)
+    geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
+                      filter(str_detect(parameter,"exp_tm")),aes(y=median,ymin=`2.5%`, ymax=`97.5%`,x=0.9))+
+      geom_text(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
+                  filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50% threshold"),hjust=1)
   
   ggsave(paste0("results/changeplot",wav,preVar,postVar,"_Doses pre",doses_pre,"_Doses post", doses_post, "_Only seropositives",sero_pos_pre,".png"),wave_change_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
@@ -249,56 +328,56 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
     pivot_longer(c(median, `2.5%`, `97.5%`)) %>% 
     mutate(value=ifelse(parameter=="a"|parameter=="c",value*100,value))
 
-  res_trans <- res_est%>%
-    pivot_wider(names_from = name,values_from = value) %>% 
-    bind_rows(
-      extract_ab_thresholds(wave_res, thresh = "a", mult = 0.5) %>%
-        mutate(parameter = "a_0.5") %>% 
-        rowwise() %>% 
-        mutate(
-          protected=model_dat %>% 
-            filter(pre>1.09) %>% 
-            summarise(n=n(),
-                      protected_p=sum(pre>x)/n) %>% 
-            pull(protected_p)) %>% 
-        pivot_wider(values_from = c(x,protected),names_from = q) %>% 
-        select(-c(mean,sd))
-    ) %>%
-    bind_rows(
-      extract_ab_thresholds(wave_res, thresh = "thresh_50") %>%
-        rowwise() %>% 
-        mutate(
-          protected=model_dat %>% 
-            filter(pre>1.09) %>% 
-            summarise(n=n(),
-                      protected_p=sum(pre>x)/n) %>% 
-            pull(protected_p)) %>%  
-        pivot_wider(values_from = c(x,protected),names_from = q) %>% 
-        select(-c(mean,sd))
-    ) %>%
-    bind_rows(
-      extract_ab_thresholds(wave_res, thresh = "thresh_80") %>% 
-        rowwise() %>% 
-        mutate(
-          protected=model_dat %>% 
-            filter(pre>1.09) %>% 
-            summarise(n=n(),
-                      protected_p=sum(pre>x)/n) %>% 
-            pull(protected_p)) %>%  
-        pivot_wider(values_from = c(x,protected),names_from = q) %>% 
-        select(-c(mean,sd))
-    ) %>%
-    filter(parameter%!in%c("a", "c", "exp_tm")) %>% 
-    select(-c(median, `2.5%`, `97.5%`)) %>% 
-    mutate(across(c(x_0.5, x_0.025, x_0.975),  ~ formatC(., digits = 1, format = "f")),
-           across(c(protected_0.5, protected_0.025, protected_0.975),~ formatC(.*100, digits = 1, format = "f")),
-           x_0.975 = case_when(as.numeric(x_0.975) > max(model_dat$pre) ~ paste0(">",plyr::round_any(max(model_dat$pre),500)), 
-                               TRUE ~ x_0.975)) %>%
-    mutate(estimate = paste0(x_0.5, " (", x_0.025, ", ", x_0.975,")"),
-           prop_protected = paste0(protected_0.5, " (", protected_0.025, ", ", protected_0.975,")")
-    ) %>% 
-    select(parameter,prop_protected, estimate) %>%
-    pivot_wider(values_from = c(estimate,prop_protected), names_from = parameter)
+  # res_trans <- res_est%>%
+  #   pivot_wider(names_from = name,values_from = value) %>% 
+    # bind_rows(
+    #   extract_ab_thresholds(wave_res, thresh = "a", mult = 0.5) %>%
+    #     mutate(parameter = "a_0.5") %>%
+    #     rowwise() %>%
+    #     mutate(
+    #       protected=model_dat %>%
+    #         filter(pre>1.09) %>%
+    #         summarise(n=n(),
+    #                   protected_p=sum(pre>x)/n) %>%
+    #         pull(protected_p)) %>%
+    #     pivot_wider(values_from = c(x,protected),names_from = q) %>%
+    #     select(-c(mean,sd))
+    # ) %>%
+    # bind_rows(
+    #   extract_ab_thresholds(wave_res, thresh = "thresh_50") %>%
+    #     rowwise() %>%
+    #     mutate(
+    #       protected=model_dat %>%
+    #         filter(pre>1.09) %>%
+    #         summarise(n=n(),
+    #                   protected_p=sum(pre>x)/n) %>%
+    #         pull(protected_p)) %>%
+    #     pivot_wider(values_from = c(x,protected),names_from = q) %>%
+    #     select(-c(mean,sd))
+    # ) %>%
+    # bind_rows(
+    #   extract_ab_thresholds(wave_res, thresh = "thresh_80") %>%
+    #     rowwise() %>%
+    #     mutate(
+    #       protected=model_dat %>%
+    #         filter(pre>1.09) %>%
+    #         summarise(n=n(),
+    #                   protected_p=sum(pre>x)/n) %>%
+    #         pull(protected_p)) %>%
+    #     pivot_wider(values_from = c(x,protected),names_from = q) %>%
+    #     select(-c(mean,sd))
+    # ) %>%
+  #   filter(parameter%!in%c("a", "c", "exp_tm")) %>% 
+  #   select(-c(median, `2.5%`, `97.5%`)) %>% 
+  #   mutate(across(c(x_0.5, x_0.025, x_0.975),  ~ formatC(., digits = 1, format = "f")),
+  #          across(c(protected_0.5, protected_0.025, protected_0.975),~ formatC(.*100, digits = 1, format = "f")),
+  #          x_0.975 = case_when(as.numeric(x_0.975) > max(model_dat$pre) ~ paste0(">",plyr::round_any(max(model_dat$pre),500)), 
+  #                              TRUE ~ x_0.975)) %>%
+  #   mutate(estimate = paste0(x_0.5, " (", x_0.025, ", ", x_0.975,")"),
+  #          prop_protected = paste0(protected_0.5, " (", protected_0.025, ", ", protected_0.975,")")
+  #   ) %>% 
+  #   select(parameter,prop_protected, estimate) %>%
+  #   pivot_wider(values_from = c(estimate,prop_protected), names_from = parameter)
   
   res <- res_est %>% 
     pivot_wider(names_from = name,values_from = value) %>% 
@@ -309,7 +388,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
     ) %>% 
     select(parameter, estimate) %>%
     pivot_wider(values_from = c(estimate), names_from = parameter) %>% 
-    bind_cols(res_trans) %>%
+    #bind_cols(res_trans) %>%
     mutate(
       Wave = wav,
       pre = preVar,
@@ -321,14 +400,10 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
     ) %>% 
     select(-c(estimate_a_0.5,exp_tm,prop_protected_a_0.5))
   
-  dat_size<-model_dat %>% summarise(n=n(),n_increased=sum(increase_2_v_1==T))
-  
-  res <- res %>% bind_cols(dat_size)
-  
   #goodness of fit
   (wave_gof <- remove_geom(wave_plot,"GeomPointrange")+
       geom_pointrange(data=model_dat %>% 
-                        mutate(titre_group=cut(pre,breaks=c(-Inf,1.09,5,10,50,100,500,Inf))) %>% 
+                        mutate(titre_group=cut(pre,breaks=c(-Inf,1.09,5,10,50,100,500,1000,5000,Inf))) %>% 
                         group_by(titre_group) %>% 
                         summarise(N=n(),
                                   avg_titre=median(pre),
@@ -340,7 +415,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, doses_pre=0, dos
   )
   ggsave(paste0("results/wave_gof",wav,preVar,postVar,".png"),wave_gof,width=120,height=100,units="mm",dpi=600,bg="white")
   
-  return(list(res=res,wave_change_plot=wave_change_plot,wave_plot=wave_plot))
+  return(list(res=res,proportion_protected=proportion_protected,wave_change_plot=wave_change_plot,wave_plot=wave_plot,or_res=or_res))
 }
 
 `%!in%` <- Negate(`%in%`)

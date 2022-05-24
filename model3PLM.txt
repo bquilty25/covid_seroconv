@@ -1,0 +1,37 @@
+
+  model{ 
+  for (i in 1:n){
+   for (j in 1:p){
+    Y[i , j] ~ dbern( prob[i , j])
+    logit(prob.star[i , j]) <- alpha[j]*( theta[i] - delta[j])
+    prob[i , j] <- eta[j] + (gamma[j] - eta[j]) * prob.star[i , j]
+   }
+   theta[i] ~ dnorm(0.0 , 1.0)
+  }
+ 
+  for (j in 1:p){
+   delta[j] ~ dnorm(m.delta, pr.delta)
+   alpha[j] ~ dnorm(m.alpha, pr.alpha) T(0, )
+   eta[j]    ~ dbeta(a.eta, b.eta)
+   gamma[j]  ~ dbeta(a.gamma, b.gamma)
+  }
+   pr.delta <- pow(s.delta , -2)
+   pr.alpha <- pow(s.alpha , -2)
+   
+   m.delta ~ dnorm(0,5)
+   m.alpha ~ dnorm(0,5)
+   s.delta ~ dunif(0,10)
+   s.alpha ~ dunif(0,10)
+   a.eta ~ dunif(0,100)
+   b.eta ~ dunif(0,100)
+   a.gamma ~ dunif(0,100)
+   b.gamma ~ dunif(0,100)
+     
+   for(i in 1:n){
+    for(j in 1:p){
+     Y.rep[i, j] ~ dbern(prob[i, j])
+     loglik_y[i, j]<-logdensity.bern(Y[i,j], prob[i, j])
+    }
+   }
+ }
+ 
