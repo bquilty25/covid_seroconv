@@ -5,7 +5,8 @@ source("scripts/utils.R")
 datw4 %>%
   filter(variant == "WT") %>%
   mutate(wave = paste0("wave",wave)) %>%
-  pivot_wider(names_from = wave, values_from = value) %>%
+  select(-c(n_doses,collection_date)) %>% 
+  pivot_wider(names_from = wave, values_from = igg) %>%
   mutate(selected = (wave1 >= wave2) & (wave2 >= wave3) & (wave3 > wave4)) %>%
   pivot_longer(cols = wave1:wave4, names_to = "wave") %>%
   ggplot(aes(x = wave, y = value, group = pid_child, color = selected))+
@@ -17,15 +18,16 @@ datw4 %>%
 
 ## plot correlation of variant specific IgG with wild type
 datw4 %>%
-  pivot_wider(names_from = variant, values_from = value) %>%
+  pivot_wider(names_from = variant, values_from = igg) %>%
   pivot_longer(cols = Beta:Omicron, names_to = "Variant", values_to = "Other") %>%
   ggplot(aes(x=WT, y=Other, color = factor(wave))) +
-  geom_point(size = 2, alpha =.2, stroke = 1) + 
+  geom_point(size = 0.5, alpha =.5, stroke = 1) + 
   geom_abline(slope = 1, intercept = 0, lty = "dashed", lwd = 1, alpha=.5)+
   scale_x_log10() + scale_y_log10() +
-  scale_colour_brewer("Titres after wave",type="qual",palette = "Set2", labels=c("WT","Beta", "Delta","Omicron"), direction=-1)+
+  scale_colour_brewer("Titres after wave",type="qual",palette = "Set2", labels=c("WT","Beta", "Delta","Omicron"), direction=1)+
   facet_wrap(.~Variant) +
-  theme_classic()
+  theme_classic()+
+  theme(strip.background = element_blank())
 ggsave("results/titre_cor.png",width=200,height=80,units="mm",dpi=600,bg="white")
 
 # look at sample dates
@@ -58,24 +60,85 @@ sa_dat <- get_national_data(countries = "South Africa")
 
 sa_plot <- sa_dat%>% 
   mutate(date=as.Date(date)) %>% 
-  ggplot(aes(x=date,y=cases_new))+geom_col()+labs(x="Date",y="Daily reported cases")
+  mutate(variant=cut(date,breaks=c(as.Date("2020-01-01"),
+                                   as.Date("2020-12-01"), 
+                                   as.Date("2021-04-01"), 
+                                   as.Date("2021-11-15"), 
+                                   lubridate::now()),
+                                   labels=c("WT","Beta","Delta","Omicron"))) %>% 
+  group_by(variant) %>% 
+  mutate(peak=date[which.max(cases_new)]) %>% 
+  ggplot(aes(x=date,y=cases_new,fill=variant))+
+  geom_col(alpha=0.75)+
+  labs(x="",y="Daily reported cases")+
+  scale_fill_brewer("Variant wave",palette = "Set2")
 
 
 sero_time <- datw4 %>% 
   mutate(collection_date=as.Date(collection_date)) %>% 
+  group_by(wave) %>% 
+  #mutate(collection_date=median(as.Date(collection_date))) %>% 
   filter(variant=="WT") %>% 
   arrange(-n_doses) %>% 
-  #select(pid_child, wave, IgG, Date) %>%
-  ggplot(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses),alpha=factor(n_doses))) +
-  geom_point(size=1,
-  ) +
-  geom_line() +
-  xlab("") + ylab("WT IgG titre") +
+  ggplot() +
+  geom_point(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses)),
+             alpha=0.25,
+             size=1) +
+  geom_line(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses),alpha=factor(n_doses))) +
+  scale_color_manual("Number of vaccine doses received before sampling", values=c("grey",brewer_pal(palette = "Set1",direction=-1)(2)))+
+  geom_text(data=datw4 %>% 
+              mutate(collection_date=as.Date(collection_date)) %>% 
+              group_by(wave) %>% 
+              summarise(min_cd=min(collection_date),
+                        max_cd=max(collection_date),
+                        mean_cd=mean(collection_date)),
+            
+            aes(x=mean_cd,y=10000,label=wave),
+            nudge_y = 0.3
+  )+
+  ggnewscale::new_scale_colour()+
+  # geom_pointrange(data= map(results3,1) %>% bind_rows(.id="group") %>% left_join(map(results3,2) %>% bind_rows(.id="group"),by="group")  %>% select(-group) %>% separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% filter(doses_pre=="Total",sero_pos_pre==FALSE,vacc_agnostic_thresh==TRUE) %>% 
+  #                   separate(exp_tm,into = c("thresh_50","thresh_2.5","thresh_97.5"),sep=" ") %>% 
+  #                   mutate(across(contains("thresh_"),~parse_number(.))),
+  #                 aes(x=sa_dat%>% 
+  #                       mutate(date=as.Date(date)) %>% 
+  #                       mutate(variant=cut(date,breaks=c(as.Date("2020-01-01"),
+  #                                                        as.Date("2020-12-01"), 
+  #                                                        as.Date("2021-04-01"), 
+  #                                                        as.Date("2021-11-15"), 
+  #                                                        lubridate::now()),
+  #                                          labels=c("WT","Beta","Delta","Omicron"))) %>% 
+  #                       group_by(variant) %>%
+  #                       filter(variant!="WT") %>% 
+  #                       summarise(peak=date[which.max(cases_new)]) %>% pull(peak),#datw4 %>% filter(wave<4) %>% group_by(wave) %>% summarise(avg_cd=median(as.Date(collection_date))) %>% pull(avg_cd),
+  #                     y=thresh_50,ymin=thresh_2.5,ymax=thresh_97.5,
+  #                     colour=c("Beta","Delta","Omicron")),
+  #                 pch="-",
+  #                 fatten=10,size=0.5)+
+ # scale_color_manual("50% protection threshold", values=c(brewer_pal(palette = "Set2",direction=1)(4)[2:4]),guide="none")+
+  xlab("") + 
+  ylab("WT IgG titre") +
   scale_y_log10()
+  #scale_color_manual("Number of doses recieved sampling",values=c("#006d2c","#08519c","#a63603"))
 
-(sero_time/sa_plot)&
-  scale_x_date(limits = c(as.Date("2020-01-01"),as.Date("2022-05-01")),date_labels = "%b %Y")&
+
+(sa_plot/sero_time)&
+  scale_x_date(limits = c(as.Date("2020-09-01"),as.Date("2022-03-01")),date_labels = "%b %Y",breaks = "3 months")&
   theme_classic()&
-  scale_alpha_manual(values=c(0.1,0.2,0.2),guide="none")&
-  scale_color_manual("Number of doses recieved sampling",values=c("grey",brewer_pal(palette = "Set1",direction = -1)(2)))
-  
+  theme(legend.position = "bottom")&
+  scale_alpha_manual(values=c(0.5,0.5,0.5),guide="none")
+
+#ggsave(paste0("results/sero_over_time.png"),width=210/1.5,height=297/1.5,units="mm",dpi=600,bg="white")  
+
+
+b <- remove_geom(geom_type = "GeomText",map(results3,"wave_change_plot")[[1]]+scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[2])),guide="none")+ggtitle("Beta wave")) 
+d <- remove_geom(geom_type = "GeomText",map(results3,"wave_change_plot")[[2]]+scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[3])),guide="none")+labs(y="",title = "Delta wave"))
+o <- remove_geom(geom_type = "GeomText",map(results3,"wave_change_plot")[[3]]+scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[4])),guide="none")+labs(y="",title="Omicron wave"))
+
+((sa_plot/sero_time)&
+  scale_x_date(limits = c(as.Date("2020-09-01"),as.Date("2022-03-01")),date_labels = "%b %Y",breaks = "3 months")&
+  scale_alpha_manual(values=c(0.5,0.5,0.5),guide="none"))/((b+d+o)&scale_x_discrete(labels=c("Pre-wave","Post-wave"))&scale_y_log10("WT IgG titre",limits=c(NA,10000)))&plot_annotation(tag_level = "A")&
+  theme_classic()&
+  theme(legend.position = "bottom")
+
+ggsave(paste0("results/sero_over_time.png"),width=210,height=297,units="mm",dpi=600,bg="white")  

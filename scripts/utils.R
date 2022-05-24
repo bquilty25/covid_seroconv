@@ -1,6 +1,6 @@
 require("pacman")
 #remotes::install_github("njtierney/mmcc")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,covidregionaldata,janitor,sjPlot,fastDummies)
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,covidregionaldata,janitor,sjPlot,fastDummies,ggnewscale)
 
 
 lseq <- function(from=1, to=100000, length.out=6) {
@@ -175,48 +175,36 @@ remove_geom <- function(ggplot2_object, geom_type) {
 calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=5000,diag=F, browsing=F){
 
   if(browsing){browser()}
-  
-  if(sero_pos_pre){
-    
-    min_igg <- 1.09
-    
-  } else {
-    
-    min_igg <- -Inf
-    
-  }
-  
-  if(vacc_agnostic_thresh){
-    
-    wave_dat <- dat %>% 
-      filter( (variant == preVar & wave == wav-1 & igg > min_igg) | (variant == postVar & wave == wav)) 
-    
-  } else {
-    
-    doses_pre=0
-    doses_post=0
     
   wave_dat <- dat %>% 
-      filter( (variant == preVar & wave == wav-1 & n_doses == doses_pre & igg > min_igg) | (variant == postVar & wave == wav & n_doses == doses_post)) 
-  
-  }
-
-  wave_dat <- wave_dat %>% 
+      filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
     select(-c(variant,collection_date, n_doses)) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
     pivot_wider(values_from = igg,names_from = wave) %>% 
     mutate(increase_2_v_1=as.integer(post > (pre*1+threshold))) %>% 
     drop_na(pre,post) %>% 
     left_join(dat %>% 
-                filter( (variant == preVar & wave == wav-1 & igg > min_igg) | (variant == postVar & wave == wav)) %>% 
+                filter( (variant == preVar & wave == wav-1 ) | (variant == postVar & wave == wav)) %>% 
                 select(-c(variant,collection_date, igg)) %>% 
                 mutate(wave=ifelse(wave==wav-1,"doses_pre","doses_post")) %>% 
                 pivot_wider(values_from = n_doses,names_from = c(wave))) %>% 
     mutate(increase_2_v_1=as.integer(post > (pre*1+threshold)))
   
+   if(vacc_agnostic_thresh){
+    
   model_dat <- wave_dat %>% 
     filter(doses_pre==doses_post)
- 
+  
+  } else {
+    
+    n_pre=0
+    n_post=0
+    
+    model_dat <- wave_dat %>% 
+      filter(doses_pre==n_pre&doses_post==n_post)
+    
+  }
+
  
   #run model
   pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
@@ -228,8 +216,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
   #alt model
   or_model_dat <- model_dat %>% 
     mutate(doses_pre=factor(doses_pre,levels=c(0,1,2)),
-                                    log_pre=log(pre)) %>% 
-    filter(doses_pre==doses_post)
+                                    log_pre=log(pre)) 
   
   or_res <- or_model(data.list = list(n=nrow(or_model_dat),
                                          X=model.matrix(~doses_pre,or_model_dat),
@@ -253,10 +240,21 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
   
   if(diag){mcmcplot(wave_res,parms = "beta")}
   
-  proportion_protected <- doses_dat %>% 
+ if(sero_pos_pre){
+    
+    min_igg <- 1.09
+    
+  } else {
+    
+    min_igg <- -Inf
+    
+  }  
+  
+  proportion_protected <- wave_dat %>% 
     bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
                             filter(str_detect(parameter,"exp_tm"))) %>% 
-    mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){igg_pre>x}),.names="{fn}_{col}")) %>%
+    filter(pre>min_igg) %>% 
+    mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){pre>x}),.names="{fn}_{col}")) %>%
     unite("doses", doses_pre,doses_post) %>% 
     pivot_longer(c(`protected_2.5%`,`protected_median`,`protected_97.5%`)) %>% 
     tabyl(doses,value,name) %>% 
@@ -268,7 +266,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
     select(-`FALSE`) %>% 
     pivot_wider(names_from = group,values_from = `TRUE`) %>% 
     select(doses,protected_median,`protected_97.5%`,everything()) %>% 
-    bind_cols(doses_dat %>% 
+    bind_cols(wave_dat %>% 
                 group_by(doses_pre,doses_post) %>% 
                 count() %>% 
                 adorn_totals()) %>% 
@@ -297,29 +295,30 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
       coord_cartesian(xlim=c(min(model_dat$pre),max(model_dat$pre)),expand = TRUE)+
       scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent)+
       theme_minimal()+
-      theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())+ggtitle(paste("Wave",wav))
+      theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())+
+      ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))
   )
-  ggsave(paste0("results/waveplot",wav,preVar,postVar,"_Doses pre",doses_pre,"_Doses post", doses_post, "_Only seropositives",sero_pos_pre,".png"),wave_plot,width=120,height=100,units="mm",dpi=600,bg="white")
+  ggsave(paste0("results/waveplot",wav,preVar,postVar,"-vacc_ag_thresh",vacc_agnostic_thresh,"_seropositivesonly_",sero_pos_pre,".png"),wave_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
   wave_change_plot <- model_dat %>% 
       pivot_longer(c(pre,post)) %>% 
       mutate(variant=ifelse(name=="pre",paste0("pre (",preVar,")"),paste0("post (",postVar,")"))) %>% 
       mutate(variant=factor(variant, levels = c(paste0("pre (",preVar,")"),paste0("post (",postVar,")")))) %>%
       ggplot()+
-      geom_point(aes(x=variant,y=value,group=pid_child,colour=factor(doses_pre)),alpha=0.2)+
-      geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(doses_pre)),alpha=0.2)+
+      geom_point(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),alpha=0.2)+
+      geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),alpha=0.2)+
       scale_y_log10("S-specific IgG titre (WHO BAU/ml)",limits=c(NA,10000))+
       xlab("")+
       theme_minimal()+
       theme(panel.border = element_rect(fill = NA))+
       #scale_colour_manual("Increase\npost-wave",values=c("grey","#e41a1c"),labels=c("No","Yes"))+
-      ggtitle(paste0("Wave ",wav,", Doses pre: ",doses_pre,", Doses post: ", doses_post, ", Only seropositives: ", sero_pos_pre))+
+      ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))+
     geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
                       filter(str_detect(parameter,"exp_tm")),aes(y=median,ymin=`2.5%`, ymax=`97.5%`,x=0.9))+
       geom_text(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
-                  filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50% threshold"),hjust=1)
+                  filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50%\nthreshold"),hjust=1)
   
-  ggsave(paste0("results/changeplot",wav,preVar,postVar,"_Doses pre",doses_pre,"_Doses post", doses_post, "_Only seropositives",sero_pos_pre,".png"),wave_change_plot,width=150,height=100,units="mm",dpi=600,bg="white")
+  ggsave(paste0("results/changeplot",wav,preVar,postVar,"-vacc_ag_thresh",vacc_agnostic_thresh,"_seropositivesonly_",sero_pos_pre,".png"),wave_change_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
   #Tabled results
   res_est <- mmcc::tidy(as.mcmc(wave_res)) %>%
@@ -393,12 +392,14 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
       Wave = wav,
       pre = preVar,
       post = postVar,
-      doses_pre=doses_pre,
-      doses_post=doses_post,
+      vacc_agnostic_thresh = vacc_agnostic_thresh,
       sero_pos_pre=sero_pos_pre,
       .before = "a"
-    ) %>% 
-    select(-c(estimate_a_0.5,exp_tm,prop_protected_a_0.5))
+    ) 
+  
+  dat_size <- model_dat %>% summarise(n=n(),n_increased=sum(increase_2_v_1==T)) 
+  
+  res <- res %>% bind_cols(dat_size) 
   
   #goodness of fit
   (wave_gof <- remove_geom(wave_plot,"GeomPointrange")+
@@ -413,7 +414,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
                                   p.hi=binom::binom.confint(x,N,methods = "exact")$upper),
                       aes(x=avg_titre,y=p,ymin=p.lo,ymax=p.hi))
   )
-  ggsave(paste0("results/wave_gof",wav,preVar,postVar,".png"),wave_gof,width=120,height=100,units="mm",dpi=600,bg="white")
+  ggsave(paste0("results/wave_gof",wav,preVar,postVar,"-vacc_ag_thresh",vacc_agnostic_thresh,"_seropositivesonly_",sero_pos_pre,".png"),wave_gof,width=150,height=100,units="mm",dpi=600,bg="white")
   
   return(list(res=res,proportion_protected=proportion_protected,wave_change_plot=wave_change_plot,wave_plot=wave_plot,or_res=or_res))
 }
