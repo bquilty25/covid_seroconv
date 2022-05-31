@@ -23,12 +23,13 @@ datw4 %>%
   ggplot(aes(x=WT, y=Other, color = factor(wave))) +
   geom_point(size = 0.5, alpha =.5, stroke = 1) + 
   geom_abline(slope = 1, intercept = 0, lty = "dashed", lwd = 1, alpha=.5)+
-  scale_x_log10() + scale_y_log10() +
+  scale_x_log10("S-IgG titres to ancestral SARS-CoV-2") + scale_y_log10("S-IgG titres to variant SARS-CoV-2") +
   scale_colour_brewer("Titres after wave",type="qual",palette = "Set2", labels=c("WT","Beta", "Delta","Omicron"), direction=1)+
   facet_wrap(.~Variant) +
   theme_classic()+
   theme(strip.background = element_blank())
-ggsave("results/titre_cor.png",width=200,height=80,units="mm",dpi=600,bg="white")
+ggsave("results/titre_cor.png",width=200,height=100,units="mm",dpi=600,bg="white")
+ggsave("results/titre_cor.pdf",width=200,height=100,units="mm",dpi=600,bg="white")
 
 # look at sample dates
 read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
