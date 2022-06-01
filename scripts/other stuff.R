@@ -29,6 +29,8 @@ datw4 %>%
   theme_classic()+
   theme(strip.background = element_blank())
 ggsave("results/titre_cor.png",width=200,height=80,units="mm",dpi=600,bg="white")
+ggsave("results/titre_cor.pdf",width=200,height=80,units="mm",dpi=600,bg="white")
+
 
 # look at sample dates
 read_xlsx(here("data","data_for_billy_all_4waves_339_29MAR2022_with_vaccine.xlsx"),sheet = 1) %>% 
@@ -84,7 +86,7 @@ sero_time <- datw4 %>%
   geom_point(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses)),
              alpha=0.25,
              size=1) +
-  geom_line(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses),alpha=factor(n_doses))) +
+  geom_line(aes(x=collection_date, y=igg, group=pid_child,colour=factor(n_doses)),alpha=0.5,size=0.25) +
   scale_color_manual("Number of vaccine doses received before sampling", values=c("grey",brewer_pal(palette = "Set1",direction=-1)(2)))+
   geom_text(data=datw4 %>% 
               mutate(collection_date=as.Date(collection_date)) %>% 
@@ -93,10 +95,18 @@ sero_time <- datw4 %>%
                         max_cd=max(collection_date),
                         mean_cd=mean(collection_date)),
             
-            aes(x=mean_cd,y=10000,label=wave),
+            aes(x=mean_cd,y=15000,label=wave),
             nudge_y = 0.3
   )+
   ggnewscale::new_scale_colour()+
+  geom_segment(data=datw4 %>% 
+                 mutate(collection_date=as.Date(collection_date)) %>% 
+                 group_by(wave) %>% 
+                 summarise(min_cd=min(collection_date),
+                           max_cd=max(collection_date),
+                           mean_cd=mean(collection_date)),
+               
+               aes(x=mean_cd-15,xend=mean_cd+15,y=15000,yend=15000))+
   # geom_pointrange(data= map(results3,1) %>% bind_rows(.id="group") %>% left_join(map(results3,2) %>% bind_rows(.id="group"),by="group")  %>% select(-group) %>% separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% filter(doses_pre=="Total",sero_pos_pre==FALSE,vacc_agnostic_thresh==TRUE) %>% 
   #                   separate(exp_tm,into = c("thresh_50","thresh_2.5","thresh_97.5"),sep=" ") %>% 
   #                   mutate(across(contains("thresh_"),~parse_number(.))),
@@ -121,24 +131,36 @@ sero_time <- datw4 %>%
   scale_y_log10()
   #scale_color_manual("Number of doses recieved sampling",values=c("#006d2c","#08519c","#a63603"))
 
-
-(sa_plot/sero_time)&
-  scale_x_date(limits = c(as.Date("2020-09-01"),as.Date("2022-03-01")),date_labels = "%b %Y",breaks = "3 months")&
-  theme_classic()&
-  theme(legend.position = "bottom")&
-  scale_alpha_manual(values=c(0.5,0.5,0.5),guide="none")
-
 #ggsave(paste0("results/sero_over_time.png"),width=210/1.5,height=297/1.5,units="mm",dpi=600,bg="white")  
 
+b <- map(results3,"wave_change_plot")[[1]] %>% 
+  remove_geom(.,geom_type = "GeomText") %>% 
+  remove_geom(.,geom_type = "GeomPath") +
+  scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[2])),guide="none")+
+  ggtitle("Beta wave") + 
+  annotate("text",x=c(1,2),y=c(15000),label=c("1","2"))+
+  geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),size=0.25,alpha=0.5)
 
-b <- remove_geom(geom_type = "GeomText",map(results3,"wave_change_plot")[[1]]+scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[2])),guide="none")+ggtitle("Beta wave")) 
-d <- remove_geom(geom_type = "GeomText",map(results3,"wave_change_plot")[[2]]+scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[3])),guide="none")+labs(y="",title = "Delta wave"))
-o <- remove_geom(geom_type = "GeomText",map(results3,"wave_change_plot")[[3]]+scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[4])),guide="none")+labs(y="",title="Omicron wave"))
+d <- map(results3,"wave_change_plot")[[3]]%>% 
+  remove_geom(.,geom_type = "GeomText") %>% 
+  remove_geom(.,geom_type = "GeomPath")+
+  scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[3])),guide="none")+
+  labs(y="",title = "Delta wave")+ annotate("text",x=c(1,2),y=c(15000),label=c("2","3"))+
+  geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),size=0.25,alpha=0.5)
+
+o <- map(results3,"wave_change_plot")[[7]]%>% 
+  remove_geom(.,geom_type = "GeomText") %>% 
+  remove_geom(.,geom_type = "GeomPath")+
+  scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[4])),guide="none")+
+  labs(y="",title="Omicron wave")+ 
+  annotate("text",x=c(1,2),y=c(15000),label=c("3","4"))+
+  geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),size=0.25,alpha=0.5)
 
 ((sa_plot/sero_time)&
-  scale_x_date(limits = c(as.Date("2020-09-01"),as.Date("2022-03-01")),date_labels = "%b %Y",breaks = "3 months")&
-  scale_alpha_manual(values=c(0.5,0.5,0.5),guide="none"))/((b+d+o)&scale_x_discrete(labels=c("Pre-wave","Post-wave"))&scale_y_log10("WT IgG titre",limits=c(NA,10000)))&plot_annotation(tag_level = "A")&
+  scale_x_date(limits = c(as.Date("2020-09-01"),as.Date("2022-03-01")),date_labels = "%b %Y",breaks = "3 months"))/
+  ((b+d+o)&scale_x_discrete(labels=c("Pre-wave","Post-wave"))&scale_y_log10("WT IgG titre",limits=c(NA,15000)))&plot_annotation(tag_level = "A")&
   theme_classic()&
   theme(legend.position = "bottom")
 
 ggsave(paste0("results/sero_over_time.png"),width=210,height=297,units="mm",dpi=600,bg="white")  
+ggsave(paste0("results/sero_over_time.pdf"),width=210,height=297,units="mm",dpi=600,bg="white")  
