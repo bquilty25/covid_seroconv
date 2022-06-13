@@ -17,7 +17,7 @@ datw4 %>%
     theme_classic()
 
 ## plot correlation of variant specific IgG with wild type
-datw4 %>%
+dat %>% filter(age=="child") %>% 
   pivot_wider(names_from = variant, values_from = igg) %>%
   pivot_longer(cols = Beta:Omicron, names_to = "Variant", values_to = "Other") %>%
   ggplot(aes(x=WT, y=Other, color = factor(wave))) +
@@ -164,3 +164,69 @@ o <- map(results3,"wave_change_plot")[[7]]%>%
 
 ggsave(paste0("results/sero_over_time.png"),width=210,height=297,units="mm",dpi=600,bg="white")  
 ggsave(paste0("results/sero_over_time.pdf"),width=210,height=297,units="mm",dpi=600,bg="white")  
+
+
+#children plot
+
+sero_time <- child_dat %>% 
+  mutate(collection_date=as.Date(collection_date)) %>% 
+  group_by(wave) %>% 
+  #mutate(collection_date=median(as.Date(collection_date))) %>% 
+  filter(variant=="WT") %>% 
+  ggplot() +
+  geom_point(aes(x=collection_date, y=igg, group=pid_child),
+             alpha=0.25,
+             size=1) +
+  geom_line(aes(x=collection_date, y=igg, group=pid_child),alpha=0.5,size=0.25) +
+  geom_text(data=child_dat %>% 
+              mutate(collection_date=as.Date(collection_date)) %>% 
+              group_by(wave) %>% 
+              summarise(min_cd=min(collection_date),
+                        max_cd=max(collection_date),
+                        mean_cd=mean(collection_date)),
+            
+            aes(x=mean_cd,y=15000,label=wave),
+            nudge_y = 0.3
+  )+
+  ggnewscale::new_scale_colour()+
+  geom_segment(data=child_dat %>% 
+                 mutate(collection_date=as.Date(collection_date)) %>% 
+                 group_by(wave) %>% 
+                 summarise(min_cd=min(collection_date),
+                           max_cd=max(collection_date),
+                           mean_cd=mean(collection_date)),
+               
+               aes(x=mean_cd-15,xend=mean_cd+15,y=15000,yend=15000))+
+xlab("") + 
+  ylab("WT IgG titre") +
+  scale_y_log10()
+
+b <- map(results_children,"wave_change_plot")[[2]] %>% 
+  remove_geom(.,geom_type = "GeomText") %>% 
+  remove_geom(.,geom_type = "GeomPath") +
+  scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[2])),guide="none")+
+  ggtitle("Beta wave") + 
+  annotate("text",x=c(1,2),y=c(15000),label=c("1","2"))+
+  geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),size=0.25,alpha=0.5)
+
+d <- map(results_children,"wave_change_plot")[[3]]%>% 
+  remove_geom(.,geom_type = "GeomText") %>% 
+  remove_geom(.,geom_type = "GeomPath")+
+  scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[3])),guide="none")+
+  labs(y="",title = "Delta wave")+ annotate("text",x=c(1,2),y=c(15000),label=c("2","3"))+
+  geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),size=0.25,alpha=0.5)
+
+o <- map(results_children,"wave_change_plot")[[4]]%>% 
+  remove_geom(.,geom_type = "GeomText") %>% 
+  remove_geom(.,geom_type = "GeomPath")+
+  scale_color_manual(values=rev(c("grey",brewer_pal(palette="Set2")(4)[4])),guide="none")+
+  labs(y="",title="Omicron wave")+ 
+  annotate("text",x=c(1,2),y=c(15000),label=c("3","4"))+
+  geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),size=0.25,alpha=0.5)
+
+(b+d+o)&scale_x_discrete(labels=c("Pre-wave","Post-wave"))&scale_y_log10("WT IgG titre",limits=c(NA,15000))&plot_annotation(tag_level = "A")&
+  theme_classic()&
+  theme(legend.position = "bottom")
+
+ggsave(paste0("results/sero_over_time_children.png"),width=210,height=100,units="mm",dpi=600,bg="white")  
+ggsave(paste0("results/sero_over_time_children.pdf"),width=210,height=100,units="mm",dpi=600,bg="white")  

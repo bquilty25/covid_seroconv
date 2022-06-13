@@ -47,7 +47,37 @@ datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>%
                            collection_date>mat_vacc_cov_date_1+3&collection_date>mat_vacc_cov_date_2+3~2,
                            TRUE~0)) %>% 
   select(-c(mat_vacc_cov_date_1,mat_vacc_cov_date_2)) %>% 
-  replace_na(list(vaccinated=F))
+  replace_na(list(vaccinated=F)) %>% 
+  mutate(age="adult")
+
+child_dat <- read_excel("data/Child_covid_data_13june2022.xlsx") %>% 
+  left_join(read_excel("data/child_cov_seropositive_wave3.xlsx")) %>% 
+  rename_all(~stringr::str_replace(.,"^S","")) %>% 
+  rename_all(tolower) %>%
+  select(-contains("barcode"),-contains("cat"),contains("date"),-contains("collection"),-contains("analysis")) %>%
+  pivot_longer(cov2s_1w:omicron_4w,values_to = "igg") %>% 
+  mutate(variant=case_when(str_detect(name,"cov")~"WT",
+                           str_detect(name,"beta")~"Beta",
+                           str_detect(name,"delta")~"Delta",
+                           str_detect(name,"omicron")~"Omicron"),
+         variant=fct_relevel(variant,"WT","Beta","Delta","Omicron"),
+         wave=parse_number(str_sub(name,start=-4))) %>% 
+  select(-name) %>% 
+  left_join(
+    read_excel("data/Child_covid_data_13june2022.xlsx") %>% 
+      left_join(read_excel("data/child_cov_seropositive_wave3.xlsx")) %>% 
+      rename_all(~stringr::str_replace(.,"^S","")) %>% 
+      rename_all(tolower) %>% 
+      select(pid_child,contains("collectiondate")) %>% 
+      pivot_longer(collectiondate_1w:collectiondate_4w, values_to="collection_date") %>% 
+      mutate(wave=parse_number(str_sub(name))) %>% 
+      select(-name)
+  ) %>% 
+  mutate(n_doses=0,
+         age="child")
+
+dat <- bind_rows(datw4,child_dat) %>% 
+  drop_na(igg)
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
 extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1,...){
@@ -172,7 +202,7 @@ remove_geom <- function(ggplot2_object, geom_type) {
 
 #### define function to produce all the required results ----
 
-calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=5000,diag=F, browsing=F){
+calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=5000,diag=F, browsing=F){
 
   if(browsing){browser()}
     
@@ -298,7 +328,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
       theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())+
       ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))
   )
-  ggsave(paste0("results/waveplot",wav,preVar,postVar,"-vacc_ag_thresh",vacc_agnostic_thresh,"_seropositivesonly_",sero_pos_pre,".png"),wave_plot,width=150,height=100,units="mm",dpi=600,bg="white")
+  ggsave(paste0("results/waveplot","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
   wave_change_plot <- model_dat %>% 
       pivot_longer(c(pre,post)) %>% 
@@ -318,7 +348,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
       geom_text(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
                   filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50%\nthreshold"),hjust=1)
   
-  ggsave(paste0("results/changeplot",wav,preVar,postVar,"-vacc_ag_thresh",vacc_agnostic_thresh,"_seropositivesonly_",sero_pos_pre,".png"),wave_change_plot,width=150,height=100,units="mm",dpi=600,bg="white")
+  ggsave(paste0("results/changeplot","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_change_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
   #Tabled results
   res_est <- mmcc::tidy(as.mcmc(wave_res)) %>%
@@ -326,57 +356,6 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
     select(-mean,-sd) %>% 
     pivot_longer(c(median, `2.5%`, `97.5%`)) %>% 
     mutate(value=ifelse(parameter=="a"|parameter=="c",value*100,value))
-
-  # res_trans <- res_est%>%
-  #   pivot_wider(names_from = name,values_from = value) %>% 
-    # bind_rows(
-    #   extract_ab_thresholds(wave_res, thresh = "a", mult = 0.5) %>%
-    #     mutate(parameter = "a_0.5") %>%
-    #     rowwise() %>%
-    #     mutate(
-    #       protected=model_dat %>%
-    #         filter(pre>1.09) %>%
-    #         summarise(n=n(),
-    #                   protected_p=sum(pre>x)/n) %>%
-    #         pull(protected_p)) %>%
-    #     pivot_wider(values_from = c(x,protected),names_from = q) %>%
-    #     select(-c(mean,sd))
-    # ) %>%
-    # bind_rows(
-    #   extract_ab_thresholds(wave_res, thresh = "thresh_50") %>%
-    #     rowwise() %>%
-    #     mutate(
-    #       protected=model_dat %>%
-    #         filter(pre>1.09) %>%
-    #         summarise(n=n(),
-    #                   protected_p=sum(pre>x)/n) %>%
-    #         pull(protected_p)) %>%
-    #     pivot_wider(values_from = c(x,protected),names_from = q) %>%
-    #     select(-c(mean,sd))
-    # ) %>%
-    # bind_rows(
-    #   extract_ab_thresholds(wave_res, thresh = "thresh_80") %>%
-    #     rowwise() %>%
-    #     mutate(
-    #       protected=model_dat %>%
-    #         filter(pre>1.09) %>%
-    #         summarise(n=n(),
-    #                   protected_p=sum(pre>x)/n) %>%
-    #         pull(protected_p)) %>%
-    #     pivot_wider(values_from = c(x,protected),names_from = q) %>%
-    #     select(-c(mean,sd))
-    # ) %>%
-  #   filter(parameter%!in%c("a", "c", "exp_tm")) %>% 
-  #   select(-c(median, `2.5%`, `97.5%`)) %>% 
-  #   mutate(across(c(x_0.5, x_0.025, x_0.975),  ~ formatC(., digits = 1, format = "f")),
-  #          across(c(protected_0.5, protected_0.025, protected_0.975),~ formatC(.*100, digits = 1, format = "f")),
-  #          x_0.975 = case_when(as.numeric(x_0.975) > max(model_dat$pre) ~ paste0(">",plyr::round_any(max(model_dat$pre),500)), 
-  #                              TRUE ~ x_0.975)) %>%
-  #   mutate(estimate = paste0(x_0.5, " (", x_0.025, ", ", x_0.975,")"),
-  #          prop_protected = paste0(protected_0.5, " (", protected_0.025, ", ", protected_0.975,")")
-  #   ) %>% 
-  #   select(parameter,prop_protected, estimate) %>%
-  #   pivot_wider(values_from = c(estimate,prop_protected), names_from = parameter)
   
   res <- res_est %>% 
     pivot_wider(names_from = name,values_from = value) %>% 
@@ -387,8 +366,8 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
     ) %>% 
     select(parameter, estimate) %>%
     pivot_wider(values_from = c(estimate), names_from = parameter) %>% 
-    #bind_cols(res_trans) %>%
     mutate(
+      age=age,
       Wave = wav,
       pre = preVar,
       post = postVar,
@@ -414,7 +393,7 @@ calc_wave <- function(dat, wav, preVar, postVar, threshold=.01, sero_pos_pre=FAL
                                   p.hi=binom::binom.confint(x,N,methods = "exact")$upper),
                       aes(x=avg_titre,y=p,ymin=p.lo,ymax=p.hi))
   )
-  ggsave(paste0("results/wave_gof",wav,preVar,postVar,"-vacc_ag_thresh",vacc_agnostic_thresh,"_seropositivesonly_",sero_pos_pre,".png"),wave_gof,width=150,height=100,units="mm",dpi=600,bg="white")
+  ggsave(paste0("results/wave_gof","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_gof,width=150,height=100,units="mm",dpi=600,bg="white")
   
   return(list(res=res,proportion_protected=proportion_protected,wave_change_plot=wave_change_plot,wave_plot=wave_plot,or_res=or_res))
 }
