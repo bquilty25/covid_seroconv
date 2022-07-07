@@ -102,35 +102,39 @@ run_model <- function(data.list,n_iter){
     for(i in 1:n)
     {
 
-      S[i] <- a + (c-a)/(1+exp(-b*(titre[i]-tm)))
+      #S[i] <- a + (c-a)/(1+exp(b*(titre[i]-tm))) + xeta*vacc[i]
+      S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm) ))# + xeta*vacc[i]
+      #logit(S[i]) <- beta0 + beta1*(titre[i]-tm) #+ xeta*vacc[i]
 
-      Y[i]~dbern(S[i])
+      Y[i] ~ dbern(S[i])
 
     }
 
     #Priors
-    a~dbeta(1, 1)
-
-    b~dlnorm(1,tau1)
-    tau1 <- pow(sigma1,-2)
-    sigma1 ~ dunif(0.1,2)
-
-    c~dbeta(1, 1)
-
-    tm~dlnorm(1,tau2)
-    tau2 <- pow(sigma2,-2)
-    sigma2 ~ dunif(0.1,2)
-
+    
+    #Lower asymptote
+    a ~ dbeta(1, 2)
+    
+    #Logistic growth parameter
+    b ~ dgamma(1,0.01)
+    #b~dnorm(0, 1e-3)
+     #b ~ dlnorm(1,0.001)
+     #tau1 <- pow(sigma1,-2)
+     #sigma1 ~ dunif(0.01,100)
+    
+    xeta ~dnorm(0,1e-3)
+    beta0 ~dnorm(0,1e-3)
+    beta1 ~dnorm(0,1e-3)
+    
+    #Upper asymptote
+    c ~ dbeta(2, 1)
+    
+    #Inflection point
+    tm ~ dnorm(0.001, 1e-4)# log(exp_tm)
     exp_tm <- exp(tm)
-
-    thresh_80 <- 0.8*(c-a)+a
-    thresh_50 <- 0.5*(c-a)+a
+    
+    diff <- c-a
   }
-
-  inits <-  function(){list(
-    a=runif(1,0.5,0.99),
-    #b=runif(1,0.01,0.99),
-    c=runif(1,0.01,0.5))}
 
   jags.parallel(model.file=model,
        data=data.list,
@@ -139,13 +143,12 @@ run_model <- function(data.list,n_iter){
                             "a",
                             "c",
                             "tm",
+                            "xeta",
+                            "beta0",
+                            "beta1",
                             "exp_tm",
-                            "thresh_50",
-                            "thresh_80",
-                            "mu",
-                            "lambda1",
-                            "lambda2"),
-       #inits=inits,
+                            "diff"
+                            ),
        n.iter=n_iter,
        n.chains = 4)
 }
@@ -183,26 +186,9 @@ or_model <- function(data.list,n_iter){
   }
 
 
-remove_geom <- function(ggplot2_object, geom_type) {
-  # Delete layers that match the requested type.
-  layers <- lapply(ggplot2_object$layers, function(x) {
-    if (class(x$geom)[1] == geom_type) {
-      NULL
-    } else {
-      x
-    }
-  })
-  # Delete the unwanted layers.
-  layers <- layers[!sapply(layers, is.null)]
-  ggplot2_object$layers <- layers
-  ggplot2_object
-}
-
-
-
 #### define function to produce all the required results ----
 
-calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=5000,diag=F, browsing=F){
+calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=10000,diag=F, browsing=F){
 
   if(browsing){browser()}
     
@@ -223,7 +209,8 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
    if(vacc_agnostic_thresh){
     
   model_dat <- wave_dat %>% 
-    filter(doses_pre==doses_post)
+    filter(doses_pre==doses_post) %>% 
+    mutate(vacc = as.integer(doses_pre!=0))
   
   } else {
     
@@ -231,16 +218,19 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     n_post=0
     
     model_dat <- wave_dat %>% 
-      filter(doses_pre==n_pre&doses_post==n_post)
+      filter(doses_pre==n_pre&doses_post==n_post) %>% 
+      mutate(vacc = as.integer(doses_pre!=0))
     
   }
 
  
   #run model
   pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
-  wave_res <- run_model(data.list = list(n=nrow(model_dat)+length(pred_t_wave),
-                                         Y=c(as.integer(model_dat$increase_2_v_1),rep(NA,length(pred_t_wave))),
-                                         titre=c(log(model_dat$pre),log(pred_t_wave))),
+  
+  wave_res <- run_model(data.list = list(n=nrow(model_dat)+2*length(pred_t_wave),
+                                         Y=c(as.integer(model_dat$increase_2_v_1),rep(NA,2*length(pred_t_wave))),
+                                         titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
+                                         vacc=c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave)))),
                         n_iter=n_iter)
   
   #alt model
@@ -268,7 +258,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   
   #diagnostics
   
-  if(diag){mcmcplot(wave_res,parms = "beta")}
+  if(diag){mcmcplot(wave_res,random = T)}
   
  if(sero_pos_pre){
     
@@ -307,30 +297,27 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
       filter(str_detect(parameter,"S")) %>% 
       select(median,`2.5%`,`97.5%`) %>% 
       slice(nrow(model_dat)+1:n()) %>% 
-      bind_cols(pred_t_wave) %>% 
+      bind_cols(data.frame(titre=c(pred_t_wave,pred_t_wave),
+                           vacc=as.factor(c(rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave)))))) %>% 
       ggplot()+
-      geom_smooth(aes(ymin=`2.5%`, ymax=`97.5%`,y=median,x=...4),colour="#2ca25f", fill="#99d8c9", stat="identity")+
-      geom_point(data=model_dat,aes(y=as.integer(increase_2_v_1), x=pre),pch=124,size=5,alpha=0.5,colour="#2ca25f")+
-      # geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_50") %>% pivot_wider(values_from = x,names_from = q) %>% 
-      #                   select(-c(mean,sd)),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
-      # geom_pointrange(data=extract_ab_thresholds(wave_res,"thresh_80") %>% pivot_wider(values_from = x,names_from = q) %>% 
-      #                   select(-c(mean,sd)),aes(x=`0.5`,xmin=`0.025`, xmax=`0.975`,y=median))+
-      geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
-                             filter(str_detect(parameter,"exp_tm")),aes(x=median,xmin=`2.5%`, xmax=`97.5%`,y=0.5))+
-      geom_hline(data=mmcc::tidy(as.mcmc(wave_res)) %>%
-                   filter(parameter%in%c("a","c")),
-                 aes(yintercept=median),
-                 linetype="dashed")+
+      geom_smooth(aes(ymin=`2.5%`, ymax=`97.5%`,y=median,x=titre, group=vacc,colour= vacc,fill=vacc),stat = "identity")+#),colour="#2ca25f", fill="#99d8c9", stat="identity")+
+      # geom_point(data=model_dat,aes(y=as.integer(increase_2_v_1), x=pre),pch=124,size=5,alpha=0.5,colour="#2ca25f")+
+      # geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
+      #                        filter(str_detect(parameter,"exp_tm")),aes(x=median,xmin=`2.5%`, xmax=`97.5%`,y=0.5))+
+      # geom_hline(data=mmcc::tidy(as.mcmc(wave_res)) %>%
+      #              filter(parameter%in%c("a","c")),
+      #            aes(yintercept=median),
+      #            linetype="dashed")+
       scale_x_log10(paste(preVar,"S-specific IgG pre-wave (WHO BAU/ml)"))+
       coord_cartesian(xlim=c(min(model_dat$pre),max(model_dat$pre)),expand = TRUE)+
       scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent)+
       theme_minimal()+
-      theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())+
-      ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))
+      theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())#+
+      #ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))
   )
   ggsave(paste0("results/waveplot","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
-  wave_change_plot <- model_dat %>% 
+  (wave_change_plot <- model_dat %>% 
       pivot_longer(c(pre,post)) %>% 
       mutate(variant=ifelse(name=="pre",paste0("pre (",preVar,")"),paste0("post (",postVar,")"))) %>% 
       mutate(variant=factor(variant, levels = c(paste0("pre (",preVar,")"),paste0("post (",postVar,")")))) %>%
@@ -346,7 +333,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
                       filter(str_detect(parameter,"exp_tm")),aes(y=median,ymin=`2.5%`, ymax=`97.5%`,x=0.9))+
       geom_text(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
-                  filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50%\nthreshold"),hjust=1)
+                  filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50%\nthreshold"),hjust=1))
   
   ggsave(paste0("results/changeplot","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_change_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
@@ -395,7 +382,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   )
   ggsave(paste0("results/wave_gof","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_gof,width=150,height=100,units="mm",dpi=600,bg="white")
   
-  return(list(res=res,proportion_protected=proportion_protected,wave_change_plot=wave_change_plot,wave_plot=wave_plot,or_res=or_res))
+  return(list(res=res,proportion_protected=proportion_protected,wave_change_plot=wave_change_plot,wave_plot=wave_plot,or_res=or_res,wave_res=wave_res))
 }
 
 `%!in%` <- Negate(`%in%`)
@@ -408,6 +395,21 @@ transpose_df <- function(df) {
     tibble::rownames_to_column(.data = .) %>%
     tibble::as_tibble(.)
   return(t_df)
+}
+
+remove_geom <- function(ggplot2_object, geom_type) {
+  # Delete layers that match the requested type.
+  layers <- lapply(ggplot2_object$layers, function(x) {
+    if (class(x$geom)[1] == geom_type) {
+      NULL
+    } else {
+      x
+    }
+  })
+  # Delete the unwanted layers.
+  layers <- layers[!sapply(layers, is.null)]
+  ggplot2_object$layers <- layers
+  ggplot2_object
 }
 
 
