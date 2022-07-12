@@ -67,11 +67,11 @@ write(result_tab, here("results","wt_wave_results.html"))
 #wave specific titres
 results4 <-
   crossing(
-    wav = c(2, 3, 4),
+    wav = 4,#c(2, 3, 4),
     vacc_agnostic_thresh = c(TRUE),
     sero_pos_pre = c(TRUE)
   ) %>%
-  mutate(preVar = c("Beta","Delta","Omicron"),
+  mutate(preVar = "Omicron",#c("Beta","Delta","Omicron"),
          postVar = preVar) %>%
   select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
   filter(!(wav < 4 & !vacc_agnostic_thresh)) %>%
@@ -89,7 +89,7 @@ results4 <-
       vacc_agnostic_thresh = .x$vacc_agnostic_thresh,
       sero_pos_pre = .x$sero_pos_pre,
       threshold = .01,
-      browsing = F
+      browsing = T
     )
   )
 
@@ -185,3 +185,56 @@ results_children <-
                                                   "N in subgroup")))
 
 write(result_tab, here("results","wt_wave_results_children.html"))
+
+
+#### Vacc difference ----
+
+results_vacc_diff <-
+  crossing(
+    wav = c(4),
+    preVar = c("WT","Omicron"),
+    vacc_agnostic_thresh =  c(TRUE),
+    sero_pos_pre = c(FALSE),
+    vacc_diff=c(F,T)
+  ) %>%
+  mutate(postVar = preVar) %>%
+  select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff) %>%
+  filter(!(wav < 4 & !vacc_agnostic_thresh)) %>%
+  #filter(sero_pos_pre) %>% 
+  #filter(wav==4) %>% 
+  rowwise() %>%
+  group_split() %>%
+  map(
+    ~ calc_wave(
+      dat %>% filter(age=="adult"),
+      age=.x$age,
+      wav = .x$wav,
+      preVar = .x$preVar,
+      postVar = .x$postVar,
+      vacc_agnostic_thresh = .x$vacc_agnostic_thresh,
+      sero_pos_pre = .x$sero_pos_pre,
+      vacc_diff = .x$vacc_diff,
+      threshold = .01,
+      browsing = T,
+      diag=T
+    )
+  )
+
+wav=2
+
+decay_est <- dat %>% 
+  filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
+  select(-c(variant,collection_date, n_doses)) %>% 
+  mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
+  pivot_wider(values_from = igg,names_from = wave) %>% 
+  drop_na(pre,post) %>% 
+  #add in time between bloods
+  left_join(dat %>% 
+              filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
+              select(-c(variant, igg)) %>%  
+              mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
+              pivot_wider(values_from = collection_date,names_from=wave) %>% 
+              mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 
+              select(-pre,-post) %>% 
+              mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) %>%
+  mutate(change=post-pre) 

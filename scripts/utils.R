@@ -94,17 +94,17 @@ extract_ab_thresholds <- function(jags_res,thresh="thresh_50",mult=1,...){
   y %>% bind_cols(x)
 }
 
-run_model <- function(data.list,n_iter){
+run_model <- function(data.list,n_iter,vacc_diff=F){
  
+  if(vacc_diff){
   model <- function(){
 
     #Likelihood
     for(i in 1:n)
     {
 
-      #S[i] <- a + (c-a)/(1+exp(b*(titre[i]-tm))) + xeta*vacc[i]
-      S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm) ))# + xeta*vacc[i]
-      #logit(S[i]) <- beta0 + beta1*(titre[i]-tm) #+ xeta*vacc[i]
+    
+      S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm) )) + xeta*vacc[i]
 
       Y[i] ~ dbern(S[i])
 
@@ -114,13 +114,6 @@ run_model <- function(data.list,n_iter){
     
     #Lower asymptote
     a ~ dbeta(1, 2)
-    
-    #Logistic growth parameter
-    b ~ dgamma(1,0.01)
-    #b~dnorm(0, 1e-3)
-     #b ~ dlnorm(1,0.001)
-     #tau1 <- pow(sigma1,-2)
-     #sigma1 ~ dunif(0.01,100)
     
     xeta ~dnorm(0,1e-3)
     beta0 ~dnorm(0,1e-3)
@@ -135,6 +128,47 @@ run_model <- function(data.list,n_iter){
     
     diff <- c-a
   }
+  }else{
+    
+    model <- function(){
+      
+      #Likelihood
+      for(i in 1:n)
+      {
+        
+        
+        S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm))) 
+        
+        Y[i] ~ dbern(S[i])
+      
+        
+      }
+      
+      for (j in 1:n_dat){
+        p_over_thresh[j] <- step(titre[j]-tm + xeta*vacc[j])
+      }
+      
+      #Priors
+      
+      #Lower asymptote
+      a ~ dbeta(1, 2)
+      
+      xeta ~dnorm(0,1e-3)
+      beta0 ~dnorm(0,1e-3)
+      beta1 ~dnorm(0,1e-3)
+      
+      #Upper asymptote
+      c ~ dbeta(2, 1)
+      
+      #Inflection point
+      tm ~ dnorm(0.001, 1e-4)# log(exp_tm)
+      exp_tm <- exp(tm)
+      
+      diff <- c-a
+      
+      mean_p <- mean(p_over_thresh)
+    }
+  }
 
   jags.parallel(model.file=model,
        data=data.list,
@@ -147,7 +181,9 @@ run_model <- function(data.list,n_iter){
                             "beta0",
                             "beta1",
                             "exp_tm",
-                            "diff"
+                            "diff",
+                            "p_over_thresh",
+                            "mean_p"
                             ),
        n.iter=n_iter,
        n.chains = 4)
@@ -188,27 +224,39 @@ or_model <- function(data.list,n_iter){
 
 #### define function to produce all the required results ----
 
-calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=10000,diag=F, browsing=F){
+calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=10000,vacc_diff=F, diag=F, browsing=F){
 
   if(browsing){browser()}
     
   wave_dat <- dat %>% 
-      filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) %>% 
+      filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) 
+  
+  model_dat <- dat %>% 
     select(-c(variant,collection_date, n_doses)) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
     pivot_wider(values_from = igg,names_from = wave) %>% 
-    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold))) %>% 
     drop_na(pre,post) %>% 
+    #add in n_doses
     left_join(dat %>% 
-                filter( (variant == preVar & wave == wav-1 ) | (variant == postVar & wave == wav)) %>% 
                 select(-c(variant,collection_date, igg)) %>% 
                 mutate(wave=ifelse(wave==wav-1,"doses_pre","doses_post")) %>% 
                 pivot_wider(values_from = n_doses,names_from = c(wave))) %>% 
-    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold)))
+    #add in time between bloods
+    left_join(dat %>% 
+                select(-c(variant, igg)) %>%  
+                mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
+                pivot_wider(values_from = collection_date,names_from=wave) %>% 
+                mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 
+                select(-pre,-post) %>% 
+                mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff)))%>% 
+    #assumed decay = 1%  per week (4% per month) (Israel et al. 2022)
+    mutate(decay=pre*(1-0.01)^t_diff) %>% 
+    mutate(increase_2_v_1=as.integer(post > (pre*1+threshold)),
+           increase_2_v_1_decay=as.integer(post > (decay*1+threshold)))
   
    if(vacc_agnostic_thresh){
     
-  model_dat <- wave_dat %>% 
+  model_dat <- model_dat %>% 
     filter(doses_pre==doses_post) %>% 
     mutate(vacc = as.integer(doses_pre!=0))
   
@@ -217,7 +265,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     n_pre=0
     n_post=0
     
-    model_dat <- wave_dat %>% 
+    model_dat <- model_dat %>% 
       filter(doses_pre==n_pre&doses_post==n_post) %>% 
       mutate(vacc = as.integer(doses_pre!=0))
     
@@ -228,10 +276,13 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
   
   wave_res <- run_model(data.list = list(n=nrow(model_dat)+2*length(pred_t_wave),
+                                         n_dat=nrow(model_dat),
+                                         n_vacc=2,
                                          Y=c(as.integer(model_dat$increase_2_v_1),rep(NA,2*length(pred_t_wave))),
                                          titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
-                                         vacc=c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave)))),
-                        n_iter=n_iter)
+                                         vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave)))),
+                        n_iter=n_iter,
+                        vacc_diff = vacc_diff)
   
   #alt model
   or_model_dat <- model_dat %>% 

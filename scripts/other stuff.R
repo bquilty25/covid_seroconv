@@ -7,9 +7,10 @@ datw4 %>%
   mutate(wave = paste0("wave",wave)) %>%
   select(-c(n_doses,collection_date)) %>% 
   pivot_wider(names_from = wave, values_from = igg) %>%
-  mutate(selected = (wave1 >= wave2) & (wave2 >= wave3) & (wave3 > wave4)) %>%
+  filter(!(wave1 <= wave2) | (wave2 <= wave3) | (wave3 <= wave4)) %>%
+  #mutate(selected = (wave1 >= wave2) & (wave2 >= wave3) & (wave3 > wave4)) %>%
   pivot_longer(cols = wave1:wave4, names_to = "wave") %>%
-  ggplot(aes(x = wave, y = value, group = pid_child, color = selected))+
+  ggplot(aes(x = wave, y = value, group = pid_child))+#, color = selected))+
     geom_point(alpha = .4) +
     geom_line(alpha = .2) +
     scale_y_log10() +
