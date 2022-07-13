@@ -239,10 +239,32 @@ decay_est <- dat %>%
               mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) 
 
 
-decay_est %>% 
+mod_dat <- decay_est %>% 
   select(-n_doses) %>% 
-  filter(igg_post<igg_pre) %>%  
+  filter(igg_post<igg_pre*1-0.1) %>% 
+  mutate(date_post=as.numeric(difftime(date_post,date_pre),units="weeks"),
+         date_pre=0) %>% 
+  mutate(igg_post_percent=igg_post/igg_pre,
+         igg_pre_percent=1) %>% 
   pivot_longer(names_to = c(".value","set"),names_pattern = "(.+)_(.+)",cols=c(igg_pre:date_post)) %>% 
-  mutate(date_num=as.numeric(date)) %>% 
-  lme4::lmer(igg~date_num+(1|pid_child),data=.)
+  group_by(pid_child) %>% 
+  mutate(igg_pre=igg[which.min(date)])
 
+fit <- mod_dat %>% 
+  #lme4::lmer(log(igg)~date*igg_pre+(1|pid_child),data=.) 
+  INLA::inla(igg~date*log(igg_pre)+f(pid_child),data=.)
+
+INLAutils::plot_fixed_marginals(fit,CI = T)+geom_vline(xintercept = 0)
+
+INLAOutputs::FixedEffects(fit,expo = F)
+
+pred <- ggeffects::ggpredict(fit,back.transform = T)
+
+pred %>% as.data.frame()
+
+ggplot(mod_dat)+
+  geom_path(aes(x=date,y=igg,group=pid_child))+
+  scale_y_log10()+
+  geom_smooth(data=as.data.frame(pred),
+              aes(x=date.x,y=date.predicted,ymax=date.conf.high,ymin=date.conf.low),
+              stat="identity")
