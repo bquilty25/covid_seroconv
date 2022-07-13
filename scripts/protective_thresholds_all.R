@@ -225,9 +225,9 @@ wav=2
 decay_est <- dat %>% 
   filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
   select(-c(variant,collection_date, n_doses)) %>% 
-  mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
+  mutate(wave=ifelse(wave==wav-1,"igg_pre","igg_post")) %>%
   pivot_wider(values_from = igg,names_from = wave) %>% 
-  drop_na(pre,post) %>% 
+  drop_na(igg_pre,igg_post) %>% 
   #add in time between bloods
   left_join(dat %>% 
               filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
@@ -235,6 +235,14 @@ decay_est <- dat %>%
               mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
               pivot_wider(values_from = collection_date,names_from=wave) %>% 
               mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 
-              select(-pre,-post) %>% 
-              mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) %>%
-  mutate(change=post-pre) 
+              rename("date_pre"=pre,"date_post"=post) %>% 
+              mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) 
+
+
+decay_est %>% 
+  select(-n_doses) %>% 
+  filter(igg_post<igg_pre) %>%  
+  pivot_longer(names_to = c(".value","set"),names_pattern = "(.+)_(.+)",cols=c(igg_pre:date_post)) %>% 
+  mutate(date_num=as.numeric(date)) %>% 
+  lme4::lmer(igg~date_num+(1|pid_child),data=.)
+
