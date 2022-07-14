@@ -192,7 +192,7 @@ write(result_tab, here("results","wt_wave_results_children.html"))
 results_vacc_diff <-
   crossing(
     wav = c(4),
-    preVar = c("WT","Omicron"),
+    preVar = "WT",#c("WT","Omicron"),
     vacc_agnostic_thresh =  c(TRUE),
     sero_pos_pre = c(FALSE),
     vacc_diff=c(F,T)
@@ -241,30 +241,36 @@ decay_est <- dat %>%
 
 mod_dat <- decay_est %>% 
   select(-n_doses) %>% 
-  filter(igg_post<igg_pre*1-0.1) %>% 
+  filter(igg_post<igg_pre) %>% 
   mutate(date_post=as.numeric(difftime(date_post,date_pre),units="weeks"),
          date_pre=0) %>% 
-  mutate(igg_post_percent=igg_post/igg_pre,
-         igg_pre_percent=1) %>% 
-  pivot_longer(names_to = c(".value","set"),names_pattern = "(.+)_(.+)",cols=c(igg_pre:date_post)) %>% 
-  group_by(pid_child) %>% 
-  mutate(igg_pre=igg[which.min(date)])
+  mutate(igg_baseline=igg_pre
+         ) %>% 
+  pivot_longer(names_to = c(".value","set"),
+               names_pattern = "(.+)_(.+)",
+               cols=c(igg_pre,igg_post,date_pre,date_post)) 
 
-fit <- mod_dat %>% 
-  #lme4::lmer(log(igg)~date*igg_pre+(1|pid_child),data=.) 
-  INLA::inla(igg~date*log(igg_pre)+f(pid_child),data=.)
+fit_inla <- mod_dat %>% 
+  #lme4::lmer(log(igg)~date+(1|pid_child),data=.) 
+  INLA::inla(igg~date*log(igg_baseline)+f(pid_child),data=.)
 
 INLAutils::plot_fixed_marginals(fit,CI = T)+geom_vline(xintercept = 0)
 
 INLAOutputs::FixedEffects(fit,expo = F)
 
-pred <- ggeffects::ggpredict(fit,back.transform = T)
+fit_lmer <- mod_dat %>% 
+  lmerTest::lmer(log(igg)~date+(1|pid_child),data=.)
 
-pred %>% as.data.frame()
+summary(fit_lmer)
+confint(fit_lmer)
+
+sjPlot::tab_model(fit_lmer,transform = "exp")
+
+fit_lmer %>% plot_model(.,type="pred",terms = c("date","igg_baseline"))
 
 ggplot(mod_dat)+
   geom_path(aes(x=date,y=igg,group=pid_child))+
-  scale_y_log10()+
-  geom_smooth(data=as.data.frame(pred),
-              aes(x=date.x,y=date.predicted,ymax=date.conf.high,ymin=date.conf.low),
-              stat="identity")
+  scale_y_log10()#+
+  # geom_smooth(data=as.data.frame(pred),
+  #             aes(x=date.x,y=date.predicted,ymax=date.conf.high,ymin=date.conf.low),
+  #             stat="identity")

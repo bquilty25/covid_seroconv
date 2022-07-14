@@ -1,6 +1,7 @@
 require("pacman")
 #remotes::install_github("njtierney/mmcc")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,covidregionaldata,janitor,sjPlot,fastDummies,ggnewscale)
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,#covidregionaldata,
+               janitor,sjPlot,fastDummies,ggnewscale)
 
 
 lseq <- function(from=1, to=100000, length.out=6) {
@@ -231,28 +232,28 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   wave_dat <- dat %>% 
       filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) 
   
-  model_dat <- dat %>% 
+  model_dat <- wave_dat %>% 
     select(-c(variant,collection_date, n_doses)) %>% 
     mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
     pivot_wider(values_from = igg,names_from = wave) %>% 
     drop_na(pre,post) %>% 
     #add in n_doses
-    left_join(dat %>% 
+    left_join(wave_dat %>% 
                 select(-c(variant,collection_date, igg)) %>% 
                 mutate(wave=ifelse(wave==wav-1,"doses_pre","doses_post")) %>% 
                 pivot_wider(values_from = n_doses,names_from = c(wave))) %>% 
     #add in time between bloods
-    left_join(dat %>% 
+    left_join(wave_dat %>% 
                 select(-c(variant, igg)) %>%  
                 mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
                 pivot_wider(values_from = collection_date,names_from=wave) %>% 
                 mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 
                 select(-pre,-post) %>% 
-                mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff)))%>% 
+                mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) %>% 
     #assumed decay = 1%  per week (4% per month) (Israel et al. 2022)
     mutate(decay=pre*(1-0.01)^t_diff) %>% 
     mutate(increase_2_v_1=as.integer(post > (pre*1+threshold)),
-           increase_2_v_1_decay=as.integer(post > (decay*1+threshold)))
+           increase_2_v_1_decay=as.integer(post > (decay)))
   
    if(vacc_agnostic_thresh){
     
@@ -278,11 +279,11 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   wave_res <- run_model(data.list = list(n=nrow(model_dat)+2*length(pred_t_wave),
                                          n_dat=nrow(model_dat),
                                          n_vacc=2,
-                                         Y=c(as.integer(model_dat$increase_2_v_1),rep(NA,2*length(pred_t_wave))),
+                                         Y=c(as.integer(model_dat$increase_2_v_1_decay),rep(NA,2*length(pred_t_wave))),
                                          titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
                                          vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave)))),
                         n_iter=n_iter,
-                        vacc_diff = vacc_diff)
+                        vacc_diff = T)
   
   #alt model
   or_model_dat <- model_dat %>% 
@@ -361,7 +362,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
       #            linetype="dashed")+
       scale_x_log10(paste(preVar,"S-specific IgG pre-wave (WHO BAU/ml)"))+
       coord_cartesian(xlim=c(min(model_dat$pre),max(model_dat$pre)),expand = TRUE)+
-      scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent)+
+      scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent,limits=c(0,1))+
       theme_minimal()+
       theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())#+
       #ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))
