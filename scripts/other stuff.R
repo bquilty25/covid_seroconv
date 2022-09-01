@@ -1,6 +1,52 @@
 
 source("scripts/utils.R")
 
+wav=2
+
+decay_est <- dat %>% 
+  filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
+  select(-c(variant,collection_date, n_doses)) %>% 
+  mutate(wave=ifelse(wave==wav-1,"igg_pre","igg_post")) %>%
+  pivot_wider(values_from = igg,names_from = wave) %>% 
+  drop_na(igg_pre,igg_post) %>% 
+  #add in time between bloods
+  left_join(dat %>% 
+              filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
+              select(-c(variant, igg)) %>%  
+              mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
+              pivot_wider(values_from = collection_date,names_from=wave) %>% 
+              mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 
+              rename("date_pre"=pre,"date_post"=post) %>% 
+              mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) 
+
+
+mod_dat <- decay_est %>% 
+  select(-n_doses) %>% 
+  filter(igg_post<igg_pre) %>% 
+  mutate(date_post=as.numeric(difftime(date_post,date_pre),units="weeks"),
+         date_pre=0) %>% 
+  mutate(igg_baseline=igg_pre
+  ) %>% 
+  pivot_longer(names_to = c(".value","set"),
+               names_pattern = "(.+)_(.+)",
+               cols=c(igg_pre,igg_post,date_pre,date_post)) 
+
+
+fit_brm <- mod_dat %>% 
+  brms::brm(log(igg)~date+(1|pid_child),data=.)
+
+summary(fit_lmer)
+confint(fit_lmer)
+
+parameters::model_parameters(fit_lmer)
+
+fit_lmer %>% plot_model(.,type="pred")#,terms = c("date","igg_baseline"))
+
+ggplot(mod_dat)+
+  geom_path(aes(x=date,y=igg,group=pid_child))+
+  scale_y_log10()
+
+
 ## look at decay of antibodies
 datw4 %>%
   filter(variant == "WT") %>%

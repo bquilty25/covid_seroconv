@@ -195,7 +195,7 @@ results_vacc_diff <-
     preVar = "WT",#c("WT","Omicron"),
     vacc_agnostic_thresh =  c(TRUE),
     sero_pos_pre = c(FALSE),
-    vacc_diff=c(F,T)
+    vacc_diff=c(T)
   ) %>%
   mutate(postVar = preVar) %>%
   select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff) %>%
@@ -215,62 +215,40 @@ results_vacc_diff <-
       sero_pos_pre = .x$sero_pos_pre,
       vacc_diff = .x$vacc_diff,
       threshold = .01,
+      waning = F,
       browsing = T,
       diag=T
     )
   )
 
-wav=2
+#### Vacc difference ----
 
-decay_est <- dat %>% 
-  filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
-  select(-c(variant,collection_date, n_doses)) %>% 
-  mutate(wave=ifelse(wave==wav-1,"igg_pre","igg_post")) %>%
-  pivot_wider(values_from = igg,names_from = wave) %>% 
-  drop_na(igg_pre,igg_post) %>% 
-  #add in time between bloods
-  left_join(dat %>% 
-              filter( (variant == "WT" & wave == wav-1) | (variant == "WT" & wave == wav)) %>% 
-              select(-c(variant, igg)) %>%  
-              mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
-              pivot_wider(values_from = collection_date,names_from=wave) %>% 
-              mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 
-              rename("date_pre"=pre,"date_post"=post) %>% 
-              mutate(t_diff=ifelse(is.na(t_diff),mean(t_diff,na.rm=T),t_diff))) 
-
-
-mod_dat <- decay_est %>% 
-  select(-n_doses) %>% 
-  filter(igg_post<igg_pre) %>% 
-  mutate(date_post=as.numeric(difftime(date_post,date_pre),units="weeks"),
-         date_pre=0) %>% 
-  mutate(igg_baseline=igg_pre
-         ) %>% 
-  pivot_longer(names_to = c(".value","set"),
-               names_pattern = "(.+)_(.+)",
-               cols=c(igg_pre,igg_post,date_pre,date_post)) 
-
-fit_inla <- mod_dat %>% 
-  #lme4::lmer(log(igg)~date+(1|pid_child),data=.) 
-  INLA::inla(igg~date*log(igg_baseline)+f(pid_child),data=.)
-
-INLAutils::plot_fixed_marginals(fit,CI = T)+geom_vline(xintercept = 0)
-
-INLAOutputs::FixedEffects(fit,expo = F)
-
-fit_lmer <- mod_dat %>% 
-  lmerTest::lmer(log(igg)~date+(1|pid_child),data=.)
-
-summary(fit_lmer)
-confint(fit_lmer)
-
-sjPlot::tab_model(fit_lmer,transform = "exp")
-
-fit_lmer %>% plot_model(.,type="pred",terms = c("date","igg_baseline"))
-
-ggplot(mod_dat)+
-  geom_path(aes(x=date,y=igg,group=pid_child))+
-  scale_y_log10()#+
-  # geom_smooth(data=as.data.frame(pred),
-  #             aes(x=date.x,y=date.predicted,ymax=date.conf.high,ymin=date.conf.low),
-  #             stat="identity")
+results_waning <-
+  crossing(
+    wav = c(4),
+    preVar = "WT",#c("WT","Omicron"),
+    vacc_agnostic_thresh =  c(TRUE),
+    sero_pos_pre = c(FALSE),
+    vacc_diff=F,
+    waning=T
+  ) %>%
+  mutate(postVar = preVar) %>%
+  select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff,waning) %>%
+  rowwise() %>%
+  group_split() %>%
+  map(
+    ~ calc_wave(
+      dat %>% filter(age=="adult"),
+      age=.x$age,
+      wav = .x$wav,
+      preVar = .x$preVar,
+      postVar = .x$postVar,
+      vacc_agnostic_thresh = .x$vacc_agnostic_thresh,
+      sero_pos_pre = .x$sero_pos_pre,
+      vacc_diff = .x$vacc_diff,
+      threshold = .01,
+      waning = .x$waning,
+      browsing = T,
+      diag=T
+    )
+  )
