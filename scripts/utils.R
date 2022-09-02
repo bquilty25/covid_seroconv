@@ -9,16 +9,6 @@ lseq <- function(from=1, to=100000, length.out=6) {
   exp(seq(log(from), log(to), length.out = length.out))
 }
 
-#Load and clean data
-# dat <- read_xlsx(here("data","SARS_CoV2_data_3_waves_15dec2021.xlsx"),sheet = 2) %>% 
-#   pivot_longer(CoV2S_1w_m:delta_3w_m) %>% 
-#   mutate(variant=case_when(str_detect(name,"CoV2")~"WT",
-#                            str_detect(name,"beta")~"Beta",
-#                            str_detect(name,"delta")~"Delta"),
-#          variant=fct_relevel(variant,"WT","Beta","Delta"),
-#          wave=parse_number(str_sub(name,start=-4))) %>% 
-#   select(-name) 
-
 #Load and clean wave 1-4 data
 datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
@@ -50,11 +40,10 @@ datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>%
   replace_na(list(vaccinated=F)) %>% 
   mutate(age="adult")
 
-child_dat <- read_excel("data/Child_covid_data_13june2022.xlsx") %>% 
-  left_join(read_excel("data/child_cov_seropositive_wave3.xlsx")) %>% 
+child_dat <- read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
   rename_all(tolower) %>%
-  select(-contains("barcode"),-contains("cat"),contains("date"),-contains("collection"),-contains("analysis")) %>%
+  select(c(pid_child:omicron_4w),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
   pivot_longer(cov2s_1w:omicron_4w,values_to = "igg") %>% 
   mutate(variant=case_when(str_detect(name,"cov")~"WT",
                            str_detect(name,"beta")~"Beta",
@@ -64,8 +53,7 @@ child_dat <- read_excel("data/Child_covid_data_13june2022.xlsx") %>%
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) %>% 
   left_join(
-    read_excel("data/Child_covid_data_13june2022.xlsx") %>% 
-      left_join(read_excel("data/child_cov_seropositive_wave3.xlsx")) %>% 
+    read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
       rename_all(~stringr::str_replace(.,"^S","")) %>% 
       rename_all(tolower) %>% 
       select(pid_child,contains("collectiondate")) %>% 
@@ -73,8 +61,8 @@ child_dat <- read_excel("data/Child_covid_data_13june2022.xlsx") %>%
       mutate(wave=parse_number(str_sub(name))) %>% 
       select(-name)
   ) %>% 
-  mutate(n_doses=0,
-         age="child")
+  mutate(age="child",
+         n_doses=0)
 
 dat <- bind_rows(datw4,child_dat) %>% 
   drop_na(igg)
@@ -177,8 +165,8 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       
       
      p_over_thresh_unvacc   <-  sum(step(unvacc_titres-tm))/length(unvacc_titres)
-     p_over_thresh_one_dose <-  sum(step(one_dose_titres-tm))/length(one_dose_titres)
-     p_over_thresh_two_dose <-  sum(step(two_dose_titres-tm))/length(two_dose_titres)
+     #p_over_thresh_one_dose <-  sum(step(one_dose_titres-tm))/length(one_dose_titres)
+     #p_over_thresh_two_dose <-  sum(step(two_dose_titres-tm))/length(two_dose_titres)
       
       # for(i in 1:length(unvacc_titres)){
       #   unvacc_titres[i]~dnorm(mu_unvacc,0.001)
@@ -345,14 +333,27 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   #run model
   pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
   
-  wave_res <- run_model(data.list = list(n=nrow(model_dat)+2*length(pred_t_wave),
-                                         Y=c(as.integer(model_dat$increase),rep(NA,2*length(pred_t_wave))),
-                                         titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
-                                         vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave))),
-                                         unvacc_titres=log(model_dat %>% filter(pre>min_igg,n_doses==0) %>% pull(pre)),
-                                         one_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==1) %>% pull(pre)),
-                                         two_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==2) %>% pull(pre))
-                                         ),
+  #if(vacc_diff){
+    data.list <-  list(n=nrow(model_dat)+2*length(pred_t_wave),
+                       Y=c(as.integer(model_dat$increase),rep(NA,2*length(pred_t_wave))),
+                       titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
+                       vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave))),
+                       unvacc_titres=log(model_dat %>% filter(pre>min_igg,n_doses==0) %>% pull(pre)),
+                       one_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==1) %>% pull(pre)),
+                       two_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==2) %>% pull(pre))
+    )
+  # } else{
+  #   data.list <-  list(n=nrow(model_dat)+length(pred_t_wave),
+  #                      Y=c(as.integer(model_dat$increase),rep(NA,length(pred_t_wave))),
+  #                      titre=c(log(model_dat$pre),log(pred_t_wave)),
+  #                      vacc=NA,
+  #                      unvacc_titres=NA,
+  #                      one_dose_titres=NA,
+  #                      two_dose_titres=NA
+  #   )
+  # }
+  
+  wave_res <- run_model(data.list = data.list,
                         n_iter=n_iter,
                         vacc_diff = vacc_diff)
   
@@ -383,31 +384,23 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   
   if(diag){mcmcplot(wave_res,random = T)}
   
- #if(sero_pos_pre){
-    
-    min_igg <- 1.09
-    
-  #} else {
-    
-   # min_igg <- -Inf
-    
-  #}  
-  
-  bayes_p <- wave_res %>% 
-    as.mcmc() %>% 
-    mcmc_to_dt() %>% 
-    filter(str_detect(parameter,"p_over_thresh")) %>% 
-    pivot_wider(values_from = value,names_from = parameter) %>% 
-    mutate(ratio_one_dose=p_over_thresh_one_dose/p_over_thresh_unvacc,
-           ratio_two_dose=p_over_thresh_two_dose/p_over_thresh_unvacc) 
-  
-  bayes_p %>% 
-    pull(ratio_one_dose) %>% 
-    bayestestR::describe_posterior(.)
-  
-  bayes_p %>% 
-    pull(ratio_two_dose) %>% 
-    bayestestR::describe_posterior(.)
+  # if(vacc_diff==F){
+  # bayes_p <- wave_res %>% 
+  #   as.mcmc() %>% 
+  #   mcmc_to_dt() %>% 
+  #   filter(str_detect(parameter,"p_over_thresh")) %>% 
+  #   pivot_wider(values_from = value,names_from = parameter) %>% 
+  #   mutate(ratio_one_dose=p_over_thresh_one_dose/p_over_thresh_unvacc,
+  #          ratio_two_dose=p_over_thresh_two_dose/p_over_thresh_unvacc) 
+  # 
+  # bayes_p %>% 
+  #   pull(ratio_one_dose) %>% 
+  #   bayestestR::describe_posterior(.)
+  # 
+  # bayes_p %>% 
+  #   pull(ratio_two_dose) %>% 
+  #   bayestestR::describe_posterior(.)
+  # }
   
   wave_res %>% 
     as.mcmc() %>% 
@@ -459,8 +452,8 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
       mutate(variant=ifelse(name=="pre",paste0("pre (",preVar,")"),paste0("post (",postVar,")"))) %>% 
       mutate(variant=factor(variant, levels = c(paste0("pre (",preVar,")"),paste0("post (",postVar,")")))) %>%
       ggplot()+
-      geom_point(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),alpha=0.2)+
-      geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase_2_v_1)),alpha=0.2)+
+      geom_point(aes(x=variant,y=value,group=pid_child,colour=factor(increase)),alpha=0.2)+
+      geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase)),alpha=0.2)+
       scale_y_log10("S-specific IgG titre (WHO BAU/ml)",limits=c(NA,10000))+
       xlab("")+
       theme_minimal()+
@@ -511,7 +504,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
                         group_by(titre_group) %>% 
                         summarise(N=n(),
                                   avg_titre=median(pre),
-                                  x=sum(increase_2_v_1),
+                                  x=sum(increase),
                                   p=x/N,
                                   p.lo=binom::binom.confint(x,N,methods = "exact")$lower,
                                   p.hi=binom::binom.confint(x,N,methods = "exact")$upper),
