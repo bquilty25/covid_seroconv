@@ -124,25 +124,19 @@ results4 <-
 #wave specific titres
 results_children <-
   crossing(
-    wav = c(2,3,4),
+    age = "child",
+    wav = 3,#c(2,3,4),
     vacc_agnostic_thresh = c(TRUE),
     sero_pos_pre = c(TRUE),
-    preVar = c("WT","Beta","Omicron")
+    preVar = "Beta",#c("WT","Beta","Omicron")
   ) %>%
   mutate(postVar = preVar) %>%
-  bind_rows(crossing(
-         wav = c(2, 3, 4),
-         vacc_agnostic_thresh = c(TRUE),
-         sero_pos_pre = c(TRUE)
-       ) %>%
-           mutate(preVar = "WT",
-                  postVar = preVar)) %>% 
-  select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
+  select(age, wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
   rowwise() %>%
   group_split() %>%
   map(
     ~ calc_wave(
-      dat %>% filter(age=="child"),
+      dat,
       age=.x$age,
       wav = .x$wav,
       preVar = .x$preVar,
@@ -150,12 +144,14 @@ results_children <-
       vacc_agnostic_thresh = .x$vacc_agnostic_thresh,
       sero_pos_pre = .x$sero_pos_pre,
       threshold = .01,
-      browsing = T
+      browsing = F,
+      diag = T
     )
   )
 
 (result_tab <- map(results_children,1) %>%
     bind_rows(.id="group") %>% 
+    select(-n) %>% 
     left_join(map(results_children,2) %>% 
                 bind_rows(.id="group"),by="group")  %>% 
     select(-group) %>% 
@@ -163,22 +159,23 @@ results_children <-
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
     arrange(sero_pos_pre,Wave,pre,post,vacc_agnostic_thresh) %>% 
     filter(sero_pos_pre==T) %>% 
-    htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
+    htmlTable::htmlTable(rnames = FALSE, header=c("Age",
+                                                  "Wave",
                                                   "Variant assessed before wave",
                                                   "Variant assessed after wave",
                                                   "Vaccine agnostic threshold",
                                                   "Only seropositives pre-wave",
-                                                  "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
                                                   "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
+                                                  "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
+                                                  "Max - min",
                                                   "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
-                                                  "N",
                                                   "N increased",
                                                   "Doses pre-wave",
                                                   "Doses post-wave",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (median)",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (2.5% CrI)",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (97.5% CrI)",
-                                                  "N in subgroup")))
+                                                  "N")))
 
 write(result_tab, here("results","wt_wave_results_children.html"))
 
