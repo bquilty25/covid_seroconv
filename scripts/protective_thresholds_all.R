@@ -125,10 +125,10 @@ results4 <-
 results_children <-
   crossing(
     age = "child",
-    wav = 3,#c(2,3,4),
+    wav = c(2,3,4),
     vacc_agnostic_thresh = c(TRUE),
     sero_pos_pre = c(TRUE),
-    preVar = "Beta",#c("WT","Beta","Omicron")
+    preVar = c("WT","Beta","Omicron")
   ) %>%
   mutate(postVar = preVar) %>%
   select(age, wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
@@ -155,7 +155,7 @@ results_children <-
     left_join(map(results_children,2) %>% 
                 bind_rows(.id="group"),by="group")  %>% 
     select(-group) %>% 
-    filter(doses%in%c("Total")) %>% 
+    filter(doses%in%c("Total"),pre=="WT") %>% 
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
     arrange(sero_pos_pre,Wave,pre,post,vacc_agnostic_thresh) %>% 
     filter(sero_pos_pre==T) %>% 

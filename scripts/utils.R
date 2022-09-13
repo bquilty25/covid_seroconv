@@ -115,8 +115,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     a ~ dbeta(1, 2)
     
     xeta ~dnorm(0,1e-3)
-    beta1 ~dgamma(0.01,0.01)
-    beta2 ~dgamma(0.01,0.01)
+    beta1 ~dgamma(0.001,0.001)
     
     #Upper asymptote
     c ~ dbeta(2, 1)
@@ -152,7 +151,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       a ~ dbeta(1, 2)
       
       xeta ~dnorm(0,1e-3)
-      beta1 ~dgamma(0.01,0.01)
+      beta1 ~dgamma(0.001,0.001)
       
       #Upper asymptote
       c ~ dbeta(2, 1)
