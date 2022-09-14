@@ -123,14 +123,29 @@ results4 <-
 #### Children ----
 #wave specific titres
 results_children <-
-  crossing(
+  tibble(
     age = "child",
     wav = c(2,3,4),
     vacc_agnostic_thresh = c(TRUE),
     sero_pos_pre = c(TRUE),
     preVar = c("WT","Beta","Omicron")
   ) %>%
-  mutate(postVar = preVar) %>%
+  bind_rows(
+  crossing(
+    age = "child",
+    wav = c(3,4),
+    vacc_agnostic_thresh = c(TRUE),
+    sero_pos_pre = c(TRUE),
+    preVar = c("WT")
+  )) %>%
+  # tibble(
+  #   age = "child",
+  #   wav = c(3),
+  #   vacc_agnostic_thresh = c(TRUE),
+  #   sero_pos_pre = c(TRUE),
+  #   preVar = c("Beta")
+  # ) %>%
+  mutate(postVar = preVar) %>% 
   select(age, wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
   rowwise() %>%
   group_split() %>%
@@ -155,7 +170,7 @@ results_children <-
     left_join(map(results_children,2) %>% 
                 bind_rows(.id="group"),by="group")  %>% 
     select(-group) %>% 
-    filter(doses%in%c("Total"),pre=="WT") %>% 
+    filter(doses%in%c("Total")) %>% 
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
     arrange(sero_pos_pre,Wave,pre,post,vacc_agnostic_thresh) %>% 
     filter(sero_pos_pre==T) %>% 

@@ -92,7 +92,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     {
 
     
-      S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm) )) + xeta*vacc[i]
+      S[i] <- a + (c-a)/(1+exp(-beta1*(titre[i]-tm) )) + xeta*vacc[i]
 
       Y[i] ~ dbern(S[i])
 
@@ -115,13 +115,13 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     a ~ dbeta(1, 2)
     
     xeta ~dnorm(0,1e-3)
-    beta1 ~dgamma(0.001,0.001)
+    beta1 ~dnorm(0,1e-3);T(0,)#dgamma(0.1,0.001)
     
     #Upper asymptote
     c ~ dbeta(2, 1)
     
     #Inflection point
-    tm ~ dnorm(0.001, 1e-4)# log(exp_tm)
+    tm ~ dnorm(100, 1e-4)# log(exp_tm)
     exp_tm <- exp(tm)
     
     diff <- c-a
@@ -137,7 +137,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       {
         
         
-        S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm))) 
+        S[i] <- a + (c-a)/(1+exp(-beta1*(titre[i]-tm))) 
         
         Y[i] ~ dbern(S[i])
       
@@ -151,13 +151,13 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       a ~ dbeta(1, 2)
       
       xeta ~dnorm(0,1e-3)
-      beta1 ~dgamma(0.001,0.001)
+      beta1 ~dnorm(0,1e-3);T(0,)#dgamma(0.1,0.001)
       
       #Upper asymptote
       c ~ dbeta(2, 1)
       
       #Inflection point
-      tm ~ dnorm(0.001, 1e-4)# log(exp_tm)
+      tm ~ dnorm(100, 1e-3)# log(exp_tm)
       exp_tm <- exp(tm)
       
       diff <- c-a
