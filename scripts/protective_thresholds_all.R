@@ -68,10 +68,10 @@ write(result_tab, here("results","wt_wave_results.html"))
 results4 <-
   crossing(
     wav = 4,#c(2, 3, 4),
-    vacc_agnostic_thresh = c(TRUE),
+    vacc_agnostic_thresh = c(FALSE,TRUE),
     sero_pos_pre = c(TRUE)
   ) %>%
-  mutate(preVar = "Omicron",#c("Beta","Delta","Omicron"),
+  mutate(preVar = "WT",#"Omicron",#c("Beta","Delta","Omicron"),
          postVar = preVar) %>%
   select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
   filter(!(wav < 4 & !vacc_agnostic_thresh)) %>%
@@ -123,30 +123,23 @@ results4 <-
 #### Children ----
 #wave specific titres
 results_children <-
-  tibble(
-    age = "child",
+  crossing(
     wav = c(2,3,4),
     vacc_agnostic_thresh = c(TRUE),
     sero_pos_pre = c(TRUE),
     preVar = c("WT","Beta","Omicron")
   ) %>%
-  bind_rows(
-  crossing(
-    age = "child",
-    wav = c(3,4),
-    vacc_agnostic_thresh = c(TRUE),
-    sero_pos_pre = c(TRUE),
-    preVar = c("WT")
-  )) %>%
-  # tibble(
-  #   age = "child",
-  #   wav = c(3),
-  #   vacc_agnostic_thresh = c(TRUE),
-  #   sero_pos_pre = c(TRUE),
-  #   preVar = c("Beta")
-  # ) %>%
-  mutate(postVar = preVar) %>% 
-  select(age, wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
+  mutate(postVar = preVar,
+         age ="child") %>%
+  # bind_rows(crossing(
+  #        wav = c(2, 3, 4),
+  #        vacc_agnostic_thresh = c(TRUE),
+  #        sero_pos_pre = c(TRUE)
+  #      ) %>%
+  #          mutate(preVar = "WT",
+  #                 postVar = preVar,
+  #                 age="child")) %>% 
+  select(wav, age, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre) %>%
   rowwise() %>%
   group_split() %>%
   map(
@@ -160,13 +153,12 @@ results_children <-
       sero_pos_pre = .x$sero_pos_pre,
       threshold = .01,
       browsing = F,
-      diag = T
+      diag=T
     )
   )
 
 (result_tab <- map(results_children,1) %>%
     bind_rows(.id="group") %>% 
-    select(-n) %>% 
     left_join(map(results_children,2) %>% 
                 bind_rows(.id="group"),by="group")  %>% 
     select(-group) %>% 
@@ -174,23 +166,22 @@ results_children <-
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
     arrange(sero_pos_pre,Wave,pre,post,vacc_agnostic_thresh) %>% 
     filter(sero_pos_pre==T) %>% 
-    htmlTable::htmlTable(rnames = FALSE, header=c("Age",
-                                                  "Wave",
+    htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
                                                   "Variant assessed before wave",
                                                   "Variant assessed after wave",
                                                   "Vaccine agnostic threshold",
                                                   "Only seropositives pre-wave",
-                                                  "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
                                                   "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
-                                                  "Max - min",
+                                                  "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
                                                   "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                  "N",
                                                   "N increased",
                                                   "Doses pre-wave",
                                                   "Doses post-wave",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (median)",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (2.5% CrI)",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (97.5% CrI)",
-                                                  "N")))
+                                                  "N in subgroup")))
 
 write(result_tab, here("results","wt_wave_results_children.html"))
 

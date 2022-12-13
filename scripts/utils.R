@@ -92,7 +92,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     {
 
     
-      S[i] <- a + (c-a)/(1+exp(-beta1*(titre[i]-tm) )) + xeta*vacc[i]
+      S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm) )) + xeta*vacc[i]
 
       Y[i] ~ dbern(S[i])
 
@@ -115,13 +115,14 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     a ~ dbeta(1, 2)
     
     xeta ~dnorm(0,1e-3)
-    beta1 ~dnorm(0,1e-3);T(0,)#dgamma(0.1,0.001)
+    beta1 ~dnorm(0,1e-3);T(0,)#dgamma(0.01,0.01)
+    #beta2 ~dgamma(0.01,0.01)
     
     #Upper asymptote
     c ~ dbeta(2, 1)
     
     #Inflection point
-    tm ~ dnorm(100, 1e-4)# log(exp_tm)
+    tm ~ dnorm(1, 1e-4)# log(exp_tm)
     exp_tm <- exp(tm)
     
     diff <- c-a
@@ -137,7 +138,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       {
         
         
-        S[i] <- a + (c-a)/(1+exp(-beta1*(titre[i]-tm))) 
+        S[i] <- a + (c-a)/(1+exp(beta1*(titre[i]-tm))) 
         
         Y[i] ~ dbern(S[i])
       
@@ -151,13 +152,13 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       a ~ dbeta(1, 2)
       
       xeta ~dnorm(0,1e-3)
-      beta1 ~dnorm(0,1e-3);T(0,)#dgamma(0.1,0.001)
+      beta1 ~ dnorm(0,1e-3);T(0,)#dgamma(0.01,0.01)
       
       #Upper asymptote
       c ~ dbeta(2, 1)
       
       #Inflection point
-      tm ~ dnorm(100, 1e-3)# log(exp_tm)
+      tm ~ dnorm(1, 1e-4)# log(exp_tm)
       exp_tm <- exp(tm)
       
       diff <- c-a
@@ -256,8 +257,8 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   if(browsing){browser()}
     
   wave_dat <- dat %>% 
-    filter(age == age) %>% 
-    filter( (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) 
+      filter( age == age,
+        (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) 
   
   model_dat <- wave_dat %>% 
     select(-c(variant,collection_date, n_doses)) %>% 
@@ -414,7 +415,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){pre>x}),.names="{fn}_{col}")) %>%
     unite("doses", doses_pre,doses_post) %>% 
     pivot_longer(c(`protected_2.5%`,protected_median,`protected_97.5%`)) %>% 
-    tabyl(doses,value,name) %>% 
+    tabyl(doses,value,name,increase) %>% 
     adorn_totals("row") %>% 
     adorn_percentages("row")  %>%  
     adorn_pct_formatting(digits = 1)%>% 
@@ -512,8 +513,16 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   )
   ggsave(paste0("results/wave_gof","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_gof,width=150,height=100,units="mm",dpi=600,bg="white")
   
-  return(list(res=res,proportion_protected=proportion_protected,wave_change_plot=wave_change_plot,wave_plot=wave_plot,#or_res=or_res,
-              wave_res=wave_res))
+  return(
+    list(
+      res = res,
+      proportion_protected = proportion_protected,
+      wave_change_plot = wave_change_plot,
+      wave_plot = wave_plot,
+      #or_res = or_res,
+      wave_res = wave_res
+    )
+  )
 }
 
 `%!in%` <- Negate(`%in%`)
