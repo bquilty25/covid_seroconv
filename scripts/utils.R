@@ -1,6 +1,6 @@
 require("pacman")
 #remotes::install_github("njtierney/mmcc")
-pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,covidregionaldata,lmerTest,janitor,sjPlot,fastDummies,ggnewscale,parameters)
+pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brms,htmlTable,binom,scales,here,mmcc,gridExtra,tableHTML,lmerTest,janitor,sjPlot,fastDummies,ggnewscale,parameters,covidregionaldata)
 
 
 lseq <- function(from=1, to=100000, length.out=6) {
@@ -40,11 +40,11 @@ datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>%
   replace_na(list(vaccinated=F)) %>% 
   mutate(age="adult")
 
-child_dat <- read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
+child_dat <- read_excel("data/Covid_child_results_5waves_June2023.xls") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
   rename_all(tolower) %>%
-  select(c(pid_child:omicron_4w),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
-  pivot_longer(cov2s_1w:omicron_4w,values_to = "igg") %>% 
+  select(c(pid_child:omicron_5w),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
+  pivot_longer(cov2s_1w:omicron_5w,values_to = "igg") %>% 
   mutate(variant=case_when(str_detect(name,"cov")~"WT",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta",
@@ -53,11 +53,11 @@ child_dat <- read_excel("data/Covid child 4waves data for Billy August2022.xls")
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) %>% 
   left_join(
-    read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
+    read_excel("data/Covid_child_results_5waves_June2023.xls") %>% 
       rename_all(~stringr::str_replace(.,"^S","")) %>% 
       rename_all(tolower) %>% 
       select(pid_child,contains("collectiondate")) %>% 
-      pivot_longer(collectiondate_1w:collectiondate_4w, values_to="collection_date") %>% 
+      pivot_longer(collectiondate_1w:collectiondate_5w, values_to="collection_date") %>% 
       mutate(wave=parse_number(str_sub(name))) %>% 
       select(-name)
   ) %>% 
@@ -164,7 +164,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       diff <- c-a
       
       
-     p_over_thresh_unvacc   <-  sum(step(unvacc_titres-tm))/length(unvacc_titres)
+     #p_over_thresh_unvacc   <-  sum(step(unvacc_titres-tm))/length(unvacc_titres)
      #p_over_thresh_one_dose <-  sum(step(one_dose_titres-tm))/length(one_dose_titres)
      #p_over_thresh_two_dose <-  sum(step(two_dose_titres-tm))/length(two_dose_titres)
       
@@ -320,16 +320,6 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     model_dat <- model_dat %>% 
       filter(assump=="increase_2_v_1")
   }
-  
-  #if(sero_pos_pre){
-    
-    min_igg <- 1.09
-    
-  #} else {
-    
-    #min_igg <- -Inf
-    
-  #}  
  
   #run model
   pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
@@ -338,11 +328,11 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     data.list <-  list(n=nrow(model_dat)+2*length(pred_t_wave),
                        Y=c(as.integer(model_dat$increase),rep(NA,2*length(pred_t_wave))),
                        titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
-                       vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave))),
-                       unvacc_titres=log(model_dat %>% filter(pre>min_igg,n_doses==0) %>% pull(pre)),
-                       one_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==1) %>% pull(pre)),
-                       two_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==2) %>% pull(pre))
-    )
+                       vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave))))
+                       #unvacc_titres=log(model_dat %>% filter(pre>min_igg,n_doses==0) %>% pull(pre)),
+                       #one_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==1) %>% pull(pre)),
+                       #two_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==2) %>% pull(pre)))
+    
   # } else{
   #   data.list <-  list(n=nrow(model_dat)+length(pred_t_wave),
   #                      Y=c(as.integer(model_dat$increase),rep(NA,length(pred_t_wave))),
@@ -402,33 +392,12 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   #   pull(ratio_two_dose) %>% 
   #   bayestestR::describe_posterior(.)
   # }
+
+  #Calcuate proportion of cohort protected (above threshold)
+  protected_seropos_pre <- prop_protected(model_dat = model_dat,wave_res = wave_res,min_igg = 1.09) %>% mutate(sero_pos_pre=T)
+  protected_all     <- prop_protected(model_dat = model_dat,wave_res = wave_res,min_igg = -Inf) %>% mutate(sero_pos_pre=F)
   
-  wave_res %>% 
-    as.mcmc() %>% 
-    tidy() %>% 
-    filter(str_detect(parameter,"p_over_thresh")) 
-  
-  proportion_protected <- model_dat %>% 
-    filter(pre>min_igg) %>% 
-    bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
-                            filter(str_detect(parameter,"exp_tm"))) %>% 
-    mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){pre>x}),.names="{fn}_{col}")) %>%
-    unite("doses", doses_pre,doses_post) %>% 
-    pivot_longer(c(`protected_2.5%`,protected_median,`protected_97.5%`)) %>% 
-    tabyl(doses,value,name,increase) %>% 
-    adorn_totals("row") %>% 
-    adorn_percentages("row")  %>%  
-    adorn_pct_formatting(digits = 1)%>% 
-    adorn_ns() %>% 
-    bind_rows(.id="group") %>%
-    select(-`FALSE`) %>% 
-    pivot_wider(names_from = group,values_from = `TRUE`) %>% 
-    select(doses,protected_median,`protected_97.5%`,everything()) %>% 
-    bind_cols(model_dat %>% 
-                group_by(doses_pre,doses_post) %>% 
-                count() %>% 
-                adorn_totals()) %>% 
-    select(-c(doses_pre,doses_post)) 
+  protected<- bind_rows(protected_all,protected_seropos_pre) 
   
   #CoP estimate 
   (wave_plot <- mmcc::tidy(as.mcmc(wave_res)) %>% 
@@ -462,7 +431,8 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
       #scale_colour_manual("Increase\npost-wave",values=c("grey","#e41a1c"),labels=c("No","Yes"))+
       ggtitle(paste0("Wave ",wav,", vaccine agnostic threshold: ",vacc_agnostic_thresh, ", only seropositives: ", sero_pos_pre))+
     geom_pointrange(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
-                      filter(str_detect(parameter,"exp_tm")),aes(y=median,ymin=`2.5%`, ymax=`97.5%`,x=0.9))+
+                      filter(str_detect(parameter,"exp_tm")),aes(y=median,ymin=`2.5%`, ymax=`97.5%`,x=0.9),
+                    fatten=0.5)+
       geom_text(data=mmcc::tidy(as.mcmc(wave_res)) %>% 
                   filter(str_detect(parameter,"exp_tm")),aes(y=median,x=0.9, label="50%\nthreshold"),hjust=1))
   
@@ -488,15 +458,12 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
       pre = preVar,
       post = postVar,
       vacc_agnostic_thresh = vacc_agnostic_thresh,
-      sero_pos_pre=sero_pos_pre,
       .before = "a"
     ) 
   
   dat_size <- model_dat %>% summarise(n=n(),n_increased=sum(increase)) 
   
   res <- res %>% bind_cols(dat_size) 
-  
-  res
   
   #goodness of fit
   (wave_gof <- remove_geom(wave_plot,"GeomPointrange")+
@@ -516,13 +483,46 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   return(
     list(
       res = res,
-      proportion_protected = proportion_protected,
+      proportion_protected = protected,
       wave_change_plot = wave_change_plot,
       wave_plot = wave_plot,
       #or_res = or_res,
       wave_res = wave_res
     )
   )
+}
+
+prop_protected <- function(model_dat,wave_res,min_igg){
+  
+  proportion_protected_tab_counts <- model_dat %>% 
+    filter(pre>min_igg) %>% 
+    bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
+                filter(str_detect(parameter,"exp_tm"))) %>% 
+    mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){pre>x}),.names="{fn}_{col}")) %>%
+    unite("doses", doses_pre,doses_post) %>% 
+    pivot_longer(c(`protected_2.5%`,protected_median,`protected_97.5%`)) %>% 
+    tabyl(doses,value,name) 
+  
+  proportion_protected_tab_pc <- proportion_protected_tab_counts %>% 
+    adorn_percentages("row")  %>%  
+    adorn_pct_formatting(digits = 1) %>% 
+    bind_rows(.id="group") %>%
+    select(-`FALSE`) %>% 
+    rename(`Proportion`=`TRUE`)
+  
+  protected <- proportion_protected_tab_counts %>% 
+    bind_rows(.id="group") %>%
+    select(-`FALSE`) %>% 
+    rename("Count"=`TRUE`) %>% 
+    left_join(proportion_protected_tab_pc,by=c("group","doses")) %>% 
+    pivot_wider(names_from = group,values_from = c(Proportion,Count)) %>% 
+    mutate(proportion_protected=paste0(Proportion_protected_median, " (", `Proportion_protected_97.5%`, ", ", `Proportion_protected_2.5%`,")"),
+           count_protected=paste0(Count_protected_median, " (", `Count_protected_97.5%`, ", ", `Count_protected_2.5%`,")")) %>% 
+    select(doses,proportion_protected,count_protected) %>% 
+    bind_cols(model_dat %>% 
+                group_by(doses_pre,doses_post) %>% 
+                count()) %>% 
+    select(-c(doses_pre,doses_post)) 
 }
 
 `%!in%` <- Negate(`%in%`)
