@@ -40,11 +40,12 @@ datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>%
   replace_na(list(vaccinated=F)) %>% 
   mutate(age="adult")
 
-child_dat <- read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
+child_dat <- #read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
+  read_excel("data/Covid_child_results_5waves_June2023.xls") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
   rename_all(tolower) %>%
-  select(c(pid_child:omicron_4w),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
-  pivot_longer(cov2s_1w:omicron_4w,values_to = "igg") %>% 
+  select(c(pid_child:omicron_5w),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
+  pivot_longer(cov2s_1w:omicron_5w,values_to = "igg") %>% 
   mutate(variant=case_when(str_detect(name,"cov")~"WT",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta",
@@ -53,11 +54,12 @@ child_dat <- read_excel("data/Covid child 4waves data for Billy August2022.xls")
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) %>% 
   left_join(
-    read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
+    #read_excel("data/Covid child 4waves data for Billy August2022.xls") %>% 
+    read_excel("data/Covid_child_results_5waves_June2023.xls") %>% 
       rename_all(~stringr::str_replace(.,"^S","")) %>% 
       rename_all(tolower) %>% 
       select(pid_child,contains("collectiondate")) %>% 
-      pivot_longer(collectiondate_1w:collectiondate_4w, values_to="collection_date") %>% 
+      pivot_longer(collectiondate_1w:collectiondate_5w, values_to="collection_date") %>% 
       mutate(wave=parse_number(str_sub(name))) %>% 
       select(-name)
   ) %>% 
@@ -415,7 +417,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
     mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){pre>x}),.names="{fn}_{col}")) %>%
     unite("doses", doses_pre,doses_post) %>% 
     pivot_longer(c(`protected_2.5%`,protected_median,`protected_97.5%`)) %>% 
-    tabyl(doses,value,name,increase) %>% 
+    tabyl(doses,value,name) %>% 
     adorn_totals("row") %>% 
     adorn_percentages("row")  %>%  
     adorn_pct_formatting(digits = 1)%>% 

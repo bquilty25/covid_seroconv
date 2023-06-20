@@ -124,10 +124,10 @@ results4 <-
 #wave specific titres
 results_children <-
   crossing(
-    wav = c(2,3,4),
+    wav = c(2,3,4,5),
     vacc_agnostic_thresh = c(TRUE),
     sero_pos_pre = c(TRUE),
-    preVar = c("WT","Beta","Omicron")
+    preVar = c("WT","Beta","Delta","Omicron")
   ) %>%
   mutate(postVar = preVar,
          age ="child") %>%
@@ -144,7 +144,7 @@ results_children <-
   group_split() %>%
   map(
     ~ calc_wave(
-      dat,
+      dat %>% filter(age=="child"),
       age=.x$age,
       wav = .x$wav,
       preVar = .x$preVar,
@@ -152,7 +152,7 @@ results_children <-
       vacc_agnostic_thresh = .x$vacc_agnostic_thresh,
       sero_pos_pre = .x$sero_pos_pre,
       threshold = .01,
-      browsing = F,
+      browsing = T,
       diag=T
     )
   )
