@@ -273,7 +273,8 @@ results_children <-
       postVar = .x$postVar,
       threshold = .01,
       browsing = F,
-      diag=F
+      diag=F,
+      n_iter=50000
     )
   )
 
@@ -286,11 +287,11 @@ results_children <-
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
     separate(exp_tm,into = c("x","y"),sep=",") %>% 
     mutate(y=extract_numeric(y),
-           y=ifelse(y>1000,">1000",y)) %>% 
+           y=ifelse(y>2500,">2500",y)) %>% 
     mutate(exp_tm = paste0(x,", ",y,")")) %>% 
-    select(Wave, pre, post, a, c, diff, exp_tm, n.x, n_increased, doses_pre, doses_post, sero_pos_pre, proportion_protected, count_protected) %>% 
-    arrange(Wave,pre,post,sero_pos_pre) %>% 
-    #filter(sero_pos_pre==T) %>% 
+    filter(sero_pos_pre==T) %>% 
+    select(Wave, pre, post, a, c, diff, exp_tm, n.x, n_increased, doses_pre, doses_post, proportion_protected, count_protected) %>% 
+    arrange(Wave,pre,post) %>% 
     htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
                                                   "Variant assessed before wave",
                                                   "Variant assessed after wave",
@@ -302,7 +303,6 @@ results_children <-
                                                   "N increased",
                                                   "Doses pre",
                                                   "Doses post",
-                                                  "Only seropositives pre-wave",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI",
                                                   "Count of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI)")))
 
@@ -327,7 +327,8 @@ results_children_for_fig <-
       postVar = .x$postVar,
       threshold = .01,
       browsing = F,
-      diag=F
+      diag=F,
+      n_iter = 50000
     )
   )
 
@@ -338,9 +339,9 @@ results_children_for_fig <-
     select(-group) %>% 
     filter(doses%in%c("0_0","1_1","2_2","Total")) %>% 
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
-    select(Wave, pre, post, a, c, diff, exp_tm, n.x, n_increased, doses_pre, doses_post, sero_pos_pre, proportion_protected, count_protected) %>% 
-    arrange(Wave,pre,post,sero_pos_pre) %>% 
-    #filter(sero_pos_pre==T) %>% 
+    filter(sero_pos_pre==T) %>% 
+    select(Wave, pre, post, a, c, diff, exp_tm, n.x, n_increased, doses_pre, doses_post, proportion_protected, count_protected) %>% 
+    arrange(Wave,pre,post) %>% 
     htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
                                                   "Variant assessed before wave",
                                                   "Variant assessed after wave",
@@ -352,7 +353,6 @@ results_children_for_fig <-
                                                   "N increased",
                                                   "Doses pre",
                                                   "Doses post",
-                                                  "Only seropositives pre-wave",
                                                   "Proportion of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI",
                                                   "Count of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI)")))
 

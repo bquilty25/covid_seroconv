@@ -289,7 +289,7 @@ o2 <- map(results_children_for_fig,"wave_change_plot")[[4]]%>%
   geom_path(aes(x=variant,y=value,group=pid_child,colour=factor(increase)),size=0.25,alpha=0.5)
 
 ((sa_plot/sero_time)&
-    scale_x_date(limits = c(as.Date("2020-05-01"),as.Date("2022-12-01")),date_labels = "%b %Y",breaks = "3 months"))/((b|d|o|o2)&scale_x_discrete(labels=c("Pre-wave","Post-wave"))&scale_y_log10("WT IgG titre",limits=c(NA,25000)))&
+    scale_x_date(limits = c(as.Date("2020-05-01"),as.Date("2022-12-01")),date_labels = "%b %Y",breaks = "3 months"))/((b|d|o|o2)&scale_x_discrete(labels=c("Pre-wave","Post-wave"))&scale_y_log10("WT IgG titre"))&coord_cartesian(ylim=c(NA,25000))&
   plot_annotation(tag_level = "A")&
   theme_classic()&
   theme(legend.position = "bottom")

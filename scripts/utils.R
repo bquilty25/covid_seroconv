@@ -122,7 +122,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     c ~ dbeta(2, 1)
     
     #Inflection point
-    tm ~ dnorm(1, 1e-4)# log(exp_tm)
+    tm ~ dnorm(1, 1e-3)# log(exp_tm)
     exp_tm <- exp(tm)
     
     diff <- c-a
@@ -158,7 +158,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
       c ~ dbeta(2, 1)
       
       #Inflection point
-      tm ~ dnorm(1, 1e-4)# log(exp_tm)
+      tm ~ dgamma(10,2)#dnorm(5, 0.14)# log(exp_tm)
       exp_tm <- exp(tm)
       
       diff <- c-a
@@ -191,7 +191,7 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
     }
   }
 
-  jags.parallel(model.file=model,
+  jags(model.file=model,
        data=data.list,
        parameters.to.save=c("S",
                             "b",
@@ -213,8 +213,9 @@ run_model <- function(data.list,n_iter,vacc_diff=F){
                             "mu_unvacc",
                             "mu_vacc"
                             ),
+       inits = function(){list("tm"=runif(1))},
        n.iter=n_iter,
-       n.chains = 4)
+       n.chains = 2)
 }
 
 
@@ -238,14 +239,14 @@ or_model <- function(data.list,n_iter){
            tau <- 1 / (sigma * sigma)
       }
       
-    jags.parallel(model.file=model,
+    jags(model.file=model,
                   data=data.list,
                   parameters.to.save=c("S",
                                        "beta",
                                        "sigma"),
                   #inits=inits,
                   n.iter=n_iter,
-                  n.chains = 4)
+                  n.chains = 2)
     
   }
 
