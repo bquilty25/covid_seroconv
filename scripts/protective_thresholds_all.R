@@ -191,11 +191,11 @@ write(result_tab, here("results","wt_wave_results_children.html"))
 
 results_vacc_diff <-
   crossing(
-    wav = c(4),
-    preVar = "WT",#c("WT","Omicron"),
+    wav = c(5),
+    preVar = c("Omicron"),
     vacc_agnostic_thresh =  c(TRUE),
     sero_pos_pre = c(FALSE),
-    vacc_diff=c(T)
+    vacc_diff=c(F)
   ) %>%
   mutate(postVar = preVar) %>%
   select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff) %>%
@@ -217,7 +217,7 @@ results_vacc_diff <-
       threshold = .01,
       waning = F,
       browsing = T,
-      diag=T
+      diag=F
     )
   )
 

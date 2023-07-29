@@ -5,18 +5,18 @@ pacman::p_load(tidyverse,R2jags,mcmcplots,readxl,bayesplot,patchwork,ggExtra,brm
 
 lseq <- function(from=1, to=100000, length.out=6) {
   # logarithmic spaced sequence
-  # blatantly stolen from library("emdbook"), because need only this
   exp(seq(log(from), log(to), length.out = length.out))
 }
 
 #Load and clean wave 1-4 data
-datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>% 
+adult_dat <- read_excel("data/Covid_updated_dataset_vaccination_JUL2023_BillyQ.xlsx") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
   rename_all(tolower) %>%
   rename("mat_vacc_cov_date_2" =mat_cov_vacc_date_2 ) %>% 
-  select(c(pid_child:omicron_4w_m),-contains("barcode"),-contains("cat"),contains("date"),-contains("collection")) %>%
-  pivot_longer(cov2s_1w_m:omicron_4w_m,values_to = "igg") %>% 
+  select(pid_child,contains("_m"),contains("mat_vacc_cov_date"),-contains("barcode"),-contains("cat"),-contains("collection"),-contains("rbd"),-contains("age"),-contains("comment"),-contains("cov2n"),-contains("yr"),-contains("mth")) %>%
+  pivot_longer(cov2s_1w_m:omicron_5w_m,values_to = "igg") %>% 
   mutate(variant=case_when(str_detect(name,"cov")~"WT",
+                           str_detect(name,"alpha")~"Alpha",
                            str_detect(name,"beta")~"Beta",
                            str_detect(name,"delta")~"Delta",
                            str_detect(name,"omicron")~"Omicron"),
@@ -24,13 +24,13 @@ datw4 <- read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>%
          wave=parse_number(str_sub(name,start=-4))) %>% 
   select(-name) %>% 
   left_join(
-    read_excel("data/Covid data for Billy May 2022 (all data).xlsx") %>% 
+    read_excel("data/Covid_updated_dataset_vaccination_JUL2023_BillyQ.xlsx") %>% 
       rename_all(~stringr::str_replace(.,"^S","")) %>% 
       rename_all(tolower) %>% 
       select(pid_child,contains("collectiondate")) %>% 
-      pivot_longer(collectiondate_1w_m:collectiondate_4w_m, values_to="collection_date") %>% 
+      pivot_longer(collectiondate_1w_m:collectiondate_5w_m, values_to="collection_date") %>% 
       mutate(wave=parse_number(str_sub(name))) %>% 
-      select(-name)
+      select(-name,-contains("collectiondate"))
   ) %>% 
   mutate(n_doses=case_when(collection_date>mat_vacc_cov_date_1+3&collection_date<mat_vacc_cov_date_2+3|
                              collection_date>mat_vacc_cov_date_1+3&is.na(mat_vacc_cov_date_2+3)~1,
@@ -64,7 +64,7 @@ child_dat <- read_excel("data/Covid_child_results_5waves_June2023.xls") %>%
   mutate(age="child",
          n_doses=0)
 
-dat <- bind_rows(datw4,child_dat) %>% 
+dat <- bind_rows(adult_dat,child_dat) %>% 
   drop_na(igg)
 
 #take posterior samples of parameters to estimate values of titre at probability thresholds
@@ -395,10 +395,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   # }
 
   #Calcuate proportion of cohort protected (above threshold)
-  protected_seropos_pre <- prop_protected(model_dat = model_dat,wave_res = wave_res,min_igg = 1.09) %>% mutate(sero_pos_pre=T)
-  protected_all     <- prop_protected(model_dat = model_dat,wave_res = wave_res,min_igg = -Inf) %>% mutate(sero_pos_pre=F)
-  
-  protected<- bind_rows(protected_all,protected_seropos_pre) 
+  protected <- prop_protected(model_dat = model_dat,wave_res = wave_res,min_igg = 1.09) %>% mutate(sero_pos_pre=T)
   
   #CoP estimate 
   (wave_plot <- mmcc::tidy(as.mcmc(wave_res)) %>% 
@@ -494,7 +491,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
 }
 
 prop_protected <- function(model_dat,wave_res,min_igg){
-  
+
   proportion_protected_tab_counts <- model_dat %>% 
     filter(pre>min_igg) %>% 
     bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
