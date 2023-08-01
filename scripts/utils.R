@@ -491,8 +491,9 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
 }
 
 prop_protected <- function(model_dat,wave_res,min_igg){
-
-  proportion_protected_tab_counts <- model_dat %>% 
+  browser()
+  
+  proportion_protected_tab_counts_by_dose <- model_dat %>% 
     filter(pre>min_igg) %>% 
     bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
                 filter(str_detect(parameter,"exp_tm"))) %>% 
@@ -501,17 +502,41 @@ prop_protected <- function(model_dat,wave_res,min_igg){
     pivot_longer(c(`protected_2.5%`,protected_median,`protected_97.5%`)) %>% 
     tabyl(doses,value,name) 
   
-  proportion_protected_tab_pc <- proportion_protected_tab_counts %>% 
+  proportion_protected_tab_pc_by_dose <- proportion_protected_tab_counts_by_dose %>% 
     adorn_percentages("row")  %>%  
     adorn_pct_formatting(digits = 1) %>% 
     bind_rows(.id="group") %>%
     select(-`FALSE`) %>% 
     rename(`Proportion`=`TRUE`)
   
-  protected <- proportion_protected_tab_counts %>% 
+  proportion_protected_tab_counts_overall <- model_dat %>% 
+    filter(pre>min_igg) %>% 
+    bind_cols(mmcc::tidy(as.mcmc(wave_res)) %>% 
+                filter(str_detect(parameter,"exp_tm"))) %>% 
+    mutate(across(c(`2.5%`:`97.5%`),.fns=list(protected=function(x){pre>x}),.names="{fn}_{col}")) %>%
+    mutate(doses="Overall") %>% 
+    pivot_longer(c(`protected_2.5%`,protected_median,`protected_97.5%`)) %>% 
+    tabyl(doses,value,name) 
+  
+  proportion_protected_tab_pc_overall <- proportion_protected_tab_counts_overall %>% 
+    adorn_percentages("row")  %>%  
+    adorn_pct_formatting(digits = 1) %>% 
     bind_rows(.id="group") %>%
     select(-`FALSE`) %>% 
-    rename("Count"=`TRUE`) %>% 
+    rename(`Proportion`=`TRUE`)
+  
+  proportion_protected_tab_counts <- bind_rows(proportion_protected_tab_counts_by_dose %>% 
+                                                 bind_rows(.id="group") %>%
+                                                 select(-`FALSE`) %>% 
+                                                 rename("Count"=`TRUE`),
+                                               proportion_protected_tab_counts_overall %>% 
+                                                 bind_rows(.id="group") %>%
+                                                 select(-`FALSE`) %>% 
+                                                 rename("Count"=`TRUE`))
+  
+  proportion_protected_tab_pc <- bind_rows(proportion_protected_tab_pc_by_dose,proportion_protected_tab_pc_overall)
+
+  protected <- proportion_protected_tab_counts %>% 
     left_join(proportion_protected_tab_pc,by=c("group","doses")) %>% 
     pivot_wider(names_from = group,values_from = c(Proportion,Count)) %>% 
     mutate(proportion_protected=paste0(Proportion_protected_median, " (", `Proportion_protected_97.5%`, ", ", `Proportion_protected_2.5%`,")"),
