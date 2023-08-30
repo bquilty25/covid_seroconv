@@ -192,12 +192,13 @@ write(result_tab, here("results","wt_wave_results_children.html"))
 results_vacc_diff <-
   crossing(
     wav = c(2,3,4,5),
-    preVar = c("WT","Omicron"),
+    preVar = c("WT"),
     sero_pos_pre = c(FALSE),
     vacc_diff=c(F),
     data.frame(age=c("adult","adult","child"), 
              vacc_agnostic_thresh =  c(TRUE,FALSE,TRUE)),
   ) %>%
+  filter(!(age=="adult"&!vacc_agnostic_thresh&wav<4)) %>% 
   mutate(postVar = preVar) %>%
   select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff, age) %>%
   rowwise() %>%
@@ -231,8 +232,8 @@ results_vacc_diff <-
             doses_pre==doses_post|doses_pre=="Overall"
             ) %>% 
     select(age, Wave, pre, post, vacc_agnostic_thresh,  n.x, n_increased, c, a, diff, exp_tm, doses_pre, doses_post, n.y, proportion_protected, count_protected) %>% 
-    arrange(age,Wave,pre,post,vacc_agnostic_thresh,doses_pre) %>% 
-    mutate(across(c(age, Wave, pre, post, n.x, n_increased, vacc_agnostic_thresh, a, c, diff, exp_tm, proportion_protected, count_protected),unfill_vec)) %>% 
+  arrange(Wave,age,pre,post,vacc_agnostic_thresh,doses_pre) %>% 
+    mutate(across(c(age, Wave, pre, post, vacc_agnostic_thresh, a, c, diff, exp_tm, proportion_protected, count_protected),unfill_vec)) %>% 
     htmlTable::htmlTable(rnames = FALSE, header=c("Age",
                                                   "Wave",
                                                   "Variant assessed before wave",
