@@ -191,22 +191,20 @@ write(result_tab, here("results","wt_wave_results_children.html"))
 
 results_vacc_diff <-
   crossing(
-    wav = c(4,5),
+    wav = c(2,3,4,5),
     preVar = c("WT","Omicron"),
-    vacc_agnostic_thresh =  c(TRUE),
     sero_pos_pre = c(FALSE),
-    vacc_diff=c(F)
+    vacc_diff=c(F),
+    data.frame(age=c("adult","adult","child"), 
+             vacc_agnostic_thresh =  c(TRUE,FALSE,TRUE)),
   ) %>%
   mutate(postVar = preVar) %>%
-  select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff) %>%
-  filter(!(wav < 4 & !vacc_agnostic_thresh)) %>%
-  #filter(sero_pos_pre) %>% 
-  #filter(wav==4) %>% 
+  select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff, age) %>%
   rowwise() %>%
   group_split() %>%
   map(
     ~ calc_wave(
-      dat %>% filter(age=="adult"),
+      dat,
       age=.x$age,
       wav = .x$wav,
       preVar = .x$preVar,
@@ -221,31 +219,38 @@ results_vacc_diff <-
     )
   )
 
-(results_vacc_diff <- map(results_vacc_diff,1) %>%
+(results_vacc_diff_tab <- map(results_vacc_diff,1) %>%
     bind_rows(.id="group") %>% 
     left_join(map(results_vacc_diff,2) %>% 
                 bind_rows(.id="group"),by="group")  %>% 
     select(-group) %>% 
-    filter(doses%in%c("0_0","1_1","2_2","Total")) %>% 
     separate(doses,into=c("doses_pre","doses_post"),sep="_") %>% 
-    filter(sero_pos_pre==T) %>% 
-    select(Wave, pre, post, a, c, diff, exp_tm, n.x, n_increased, doses_pre, doses_post, proportion_protected, count_protected) %>% 
-    arrange(Wave,pre,post) %>% 
-    htmlTable::htmlTable(rnames = FALSE, header=c("Wave",
+     filter(sero_pos_pre==T,
+            pre=="WT",
+            !(doses_pre=="0"&age=="child"),
+            doses_pre==doses_post|doses_pre=="Overall"
+            ) %>% 
+    select(age, Wave, pre, post, vacc_agnostic_thresh,  n.x, n_increased, c, a, diff, exp_tm, doses_pre, doses_post, n.y, proportion_protected, count_protected) %>% 
+    arrange(age,Wave,pre,post,vacc_agnostic_thresh,doses_pre) %>% 
+    mutate(across(c(age, Wave, pre, post, n.x, n_increased, vacc_agnostic_thresh, a, c, diff, exp_tm, proportion_protected, count_protected),unfill_vec)) %>% 
+    htmlTable::htmlTable(rnames = FALSE, header=c("Age",
+                                                  "Wave",
                                                   "Variant assessed before wave",
                                                   "Variant assessed after wave",
-                                                  "Probability of increased titres at maximal pre-wave antibody levels (%, 95% CrI)",
-                                                  "Probability of increased titres at minimal pre-wave antibody levels (%, 95% CrI)",
-                                                  "Difference between minimal and maximal (%, 95% CrI)",
-                                                  "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
+                                                  "Threshold including vaccinated",
                                                   "N",
                                                   "N increased",
+                                                  "Probability of increased titres at minimal pre-wave antibody levels (median %, 95% CrI)",
+                                                  "Probability of increased titres at maximal pre-wave antibody levels (median %, 95% CrI)",
+                                                  "Difference between minimal and maximal (median %, 95% CrI)",
+                                                  "50% reduction threshold (WHO BAU/ml, median, 95% CrI)",
                                                   "Doses pre",
                                                   "Doses post",
-                                                  "Proportion of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI",
+                                                  "N in subgroup",
+                                                  "Proportion of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI)",
                                                   "Count of seropositives with pre-wave antibody titres higher than threshold (median, 95% CrI)")))
 
-write(results_tab_children, here("results","wave_results_children_wt.html"))
+write(results_vacc_diff_tab, here("results","wave_results_vacc_diff_tab.html"))
 
 
 #### Vacc difference ----

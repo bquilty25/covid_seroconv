@@ -8,6 +8,11 @@ lseq <- function(from=1, to=100000, length.out=6) {
   exp(seq(log(from), log(to), length.out = length.out))
 }
 
+unfill_vec <- function(x) {
+  same <- x == dplyr::lag(x)
+  ifelse(!is.na(same) & same, NA, x)
+}
+
 #Load and clean wave 1-4 data
 adult_dat <- read_excel("data/Covid_updated_dataset_vaccination_JUL2023_BillyQ.xlsx") %>% 
   rename_all(~stringr::str_replace(.,"^S","")) %>% 
@@ -253,12 +258,14 @@ or_model <- function(data.list,n_iter){
 
 #### define function to produce all the required results ----
 
-calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=10000,vacc_diff=F, waning=F, diag=F, browsing=F){
+calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=50000,vacc_diff=F, waning=F, diag=F, browsing=F){
 
   if(browsing){browser()}
     
+  
+  
   wave_dat <- dat %>% 
-      filter( age == age,
+      filter( age == !!age,
         (variant == preVar & wave == wav-1) | (variant == postVar & wave == wav)) 
   
   model_dat <- wave_dat %>% 
@@ -286,50 +293,38 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
            increase_2_v_1_10_thresh=as.integer(post > (pre*1+0.1))) %>% 
     pivot_longer(cols=c(increase_2_v_1,increase_2_v_1_waned,increase_2_v_1_10_thresh),
                  names_to = "assump",
-                 values_to = "increase")
-  
-  model_dat %>% 
-    tabyl(assump,increase) %>%
-    adorn_totals(where = "col") %>% 
-    adorn_percentages(denominator = "row") %>%
-    adorn_pct_formatting() %>%
-    adorn_ns(position = "front")
-  
-   if(vacc_agnostic_thresh){
-    
-  model_dat <- model_dat %>% 
-    filter(doses_pre==doses_post) %>% 
+                 values_to = "increase") %>% 
     mutate(vacc = as.integer(doses_pre!=0)) %>% 
     arrange(vacc)
   
+   if(vacc_agnostic_thresh){
+    
+  model_dat_filtered <- model_dat %>% 
+    filter(doses_pre==doses_post) 
+  
   } else {
     
-    n_pre=0
-    n_post=0
-    
-    model_dat <- model_dat %>% 
-      filter(doses_pre==n_pre&doses_post==n_post) %>% 
-      mutate(vacc = as.integer(doses_pre!=0)) %>% 
-      arrange(vacc)
+    model_dat_filtered <- model_dat %>% 
+      filter(doses_pre==0&doses_post==0)
     
   }
 
   if(waning){
-    model_dat <- model_dat %>% 
+    model_dat_filtered <- model_dat_filtered %>% 
       filter(assump=="increase_2_v_1_waned")
   } else {
-    model_dat <- model_dat %>% 
+    model_dat_filtered <- model_dat_filtered %>% 
       filter(assump=="increase_2_v_1")
   }
  
   #run model
-  pred_t_wave <- lseq(from=min(model_dat$pre),to=max(model_dat$pre),length.out = 1000)
+  pred_t_wave <- lseq(from=min(model_dat_filtered$pre),to=max(model_dat_filtered$pre),length.out = 1000)
   
   #if(vacc_diff){
-    data.list <-  list(n=nrow(model_dat)+2*length(pred_t_wave),
-                       Y=c(as.integer(model_dat$increase),rep(NA,2*length(pred_t_wave))),
-                       titre=c(log(model_dat$pre),log(pred_t_wave),log(pred_t_wave)),
-                       vacc=1+c(model_dat$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave))))
+    data.list <-  list(n=nrow(model_dat_filtered)+2*length(pred_t_wave),
+                       Y=c(as.integer(model_dat_filtered$increase),rep(NA,2*length(pred_t_wave))),
+                       titre=c(log(model_dat_filtered$pre),log(pred_t_wave),log(pred_t_wave)),
+                       vacc=1+c(model_dat_filtered$vacc,rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave))))
                        #unvacc_titres=log(model_dat %>% filter(pre>min_igg,n_doses==0) %>% pull(pre)),
                        #one_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==1) %>% pull(pre)),
                        #two_dose_titres=log(model_dat %>% filter(pre>min_igg,n_doses==2) %>% pull(pre)))
@@ -401,13 +396,13 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   (wave_plot <- mmcc::tidy(as.mcmc(wave_res)) %>% 
       filter(str_detect(parameter,"S")) %>% 
       select(median,`2.5%`,`97.5%`) %>% 
-      slice(nrow(model_dat)+1:n()) %>% 
+      slice(nrow(model_dat_filtered)+1:n()) %>% 
       bind_cols(data.frame(titre=c(pred_t_wave,pred_t_wave),
                            vacc=as.factor(c(rep(1,length(pred_t_wave)),rep(0,length(pred_t_wave)))))) %>% 
       ggplot()+
       geom_smooth(aes(ymin=`2.5%`, ymax=`97.5%`,y=median,x=titre, group=vacc,colour= vacc,fill=vacc),stat = "identity")+
       scale_x_log10(paste(preVar,"S-specific IgG pre-wave (WHO BAU/ml)"))+
-      coord_cartesian(xlim=c(min(model_dat$pre),max(model_dat$pre)),expand = TRUE)+
+      coord_cartesian(xlim=c(min(model_dat_filtered$pre),max(model_dat_filtered$pre)),expand = TRUE)+
       scale_y_continuous(paste("Probability of increased",postVar,"S-specific\nIgG titres following wave",wav),labels = scales::percent,limits=c(0,1))+
       theme_minimal()+
       theme(panel.border = element_rect(fill = NA),axis.ticks = element_line())#+
@@ -415,7 +410,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
   )
   ggsave(paste0("results/waveplot","age",age,"wave",wav,preVar,postVar,"vacc_ag_thresh",vacc_agnostic_thresh,"seropositivesonly",sero_pos_pre,".png"),wave_plot,width=150,height=100,units="mm",dpi=600,bg="white")
   
-  (wave_change_plot <- model_dat %>% 
+  (wave_change_plot <- model_dat_filtered %>% 
       pivot_longer(c(pre,post)) %>% 
       mutate(variant=ifelse(name=="pre",paste0("pre (",preVar,")"),paste0("post (",postVar,")"))) %>% 
       mutate(variant=factor(variant, levels = c(paste0("pre (",preVar,")"),paste0("post (",postVar,")")))) %>%
@@ -459,13 +454,13 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
       .before = "a"
     ) 
   
-  dat_size <- model_dat %>% summarise(n=n(),n_increased=sum(increase)) 
+  dat_size <- model_dat_filtered %>% summarise(n=n(),n_increased=sum(increase)) 
   
   res <- res %>% bind_cols(dat_size) 
   
   #goodness of fit
   (wave_gof <- remove_geom(wave_plot,"GeomPointrange")+
-      geom_pointrange(data=model_dat %>% 
+      geom_pointrange(data=model_dat_filtered %>% 
                         mutate(titre_group=cut(pre,breaks=c(-Inf,1.09,5,10,50,100,500,1000,5000,Inf))) %>% 
                         group_by(titre_group) %>% 
                         summarise(N=n(),
@@ -491,7 +486,10 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
 }
 
 prop_protected <- function(model_dat,wave_res,min_igg){
-  browser()
+
+  model_dat <- model_dat %>% 
+    filter(doses_pre==doses_post) %>% 
+      filter(assump=="increase_2_v_1")
   
   proportion_protected_tab_counts_by_dose <- model_dat %>% 
     filter(pre>min_igg) %>% 
@@ -542,10 +540,16 @@ prop_protected <- function(model_dat,wave_res,min_igg){
     mutate(proportion_protected=paste0(Proportion_protected_median, " (", `Proportion_protected_97.5%`, ", ", `Proportion_protected_2.5%`,")"),
            count_protected=paste0(Count_protected_median, " (", `Count_protected_97.5%`, ", ", `Count_protected_2.5%`,")")) %>% 
     select(doses,proportion_protected,count_protected) %>% 
-    bind_cols(model_dat %>% 
-                group_by(doses_pre,doses_post) %>% 
-                count()) %>% 
-    select(-c(doses_pre,doses_post)) 
+    left_join(model_dat %>% 
+                unite("doses", doses_pre,doses_post) %>% 
+                group_by(doses) %>% 
+                count() %>% 
+                ungroup() %>% 
+                bind_rows(model_dat %>% 
+                            mutate(doses="Overall") %>% 
+                            group_by(doses) %>% 
+                            count() %>% 
+                            ungroup()))
 }
 
 `%!in%` <- Negate(`%in%`)
