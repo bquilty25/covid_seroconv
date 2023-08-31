@@ -37,9 +37,9 @@ adult_dat <- read_excel("data/Covid_updated_dataset_vaccination_JUL2023_BillyQ.x
       mutate(wave=parse_number(str_sub(name))) %>% 
       select(-name,-contains("collectiondate"))
   ) %>% 
-  mutate(n_doses=case_when(collection_date>mat_vacc_cov_date_1+3&collection_date<mat_vacc_cov_date_2+3|
-                             collection_date>mat_vacc_cov_date_1+3&is.na(mat_vacc_cov_date_2+3)~1,
-                           collection_date>mat_vacc_cov_date_1+3&collection_date>mat_vacc_cov_date_2+3~2,
+  mutate(n_doses=case_when(collection_date>mat_vacc_cov_date_1+3   &collection_date<mat_vacc_cov_date_2+3|
+                             collection_date>mat_vacc_cov_date_1+3 &is.na(mat_vacc_cov_date_2+3)~1,
+                           collection_date>mat_vacc_cov_date_1+3   &collection_date>mat_vacc_cov_date_2+3~2,
                            TRUE~0)) %>% 
   select(-c(mat_vacc_cov_date_1,mat_vacc_cov_date_2)) %>% 
   replace_na(list(vaccinated=F)) %>% 
@@ -258,11 +258,9 @@ or_model <- function(data.list,n_iter){
 
 #### define function to produce all the required results ----
 
-calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pre=FALSE, vacc_agnostic_thresh=TRUE, n_iter=50000,vacc_diff=F, waning=F, diag=F, browsing=F){
+calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, vacc_agnostic_thresh=TRUE, n_iter=50000,vacc_diff=F, waning=F, diag=F, browsing=F){
 
   if(browsing){browser()}
-    
-  
   
   wave_dat <- dat %>% 
       filter( age == !!age,
@@ -280,7 +278,7 @@ calc_wave <- function(dat, age, wav, preVar, postVar, threshold=.01, sero_pos_pr
                 pivot_wider(values_from = n_doses,names_from = c(wave))) %>% 
     #add in time between bloods
     left_join(wave_dat %>% 
-                select(-c(variant, igg)) %>%  
+                select(-c(variant, igg, n_doses)) %>%  
                 mutate(wave=ifelse(wave==wav-1,"pre","post")) %>%
                 pivot_wider(values_from = collection_date,names_from=wave) %>% 
                 mutate(t_diff=as.numeric(difftime(units = "weeks",post,pre))) %>% 

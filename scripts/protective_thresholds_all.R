@@ -193,14 +193,12 @@ results_vacc_diff <-
   crossing(
     wav = c(2,3,4,5),
     preVar = c("WT"),
-    sero_pos_pre = c(FALSE),
     vacc_diff=c(F),
     data.frame(age=c("adult","adult","child"), 
-             vacc_agnostic_thresh =  c(TRUE,FALSE,TRUE)),
-  ) %>%
+             vacc_agnostic_thresh =  c(TRUE,FALSE,FALSE))) %>%
   filter(!(age=="adult"&!vacc_agnostic_thresh&wav<4)) %>% 
   mutate(postVar = preVar) %>%
-  select(wav, preVar, postVar, vacc_agnostic_thresh, sero_pos_pre,vacc_diff, age) %>%
+  select(wav, preVar, postVar, vacc_agnostic_thresh, vacc_diff, age) %>%
   rowwise() %>%
   group_split() %>%
   map(
@@ -215,7 +213,7 @@ results_vacc_diff <-
       vacc_diff = .x$vacc_diff,
       threshold = .01,
       waning = F,
-      browsing = F,
+      browsing = T,
       diag=F
     )
   )
